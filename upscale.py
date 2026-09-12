@@ -1,15 +1,16 @@
 import argparse
+import multiprocessing
 import os
 import sys
 from pathlib import Path
 
-# Set OpenMP environment variables before importing native modules
-os.environ["OMP_NUM_THREADS"] = "4"
-os.environ["MKL_NUM_THREADS"] = "4"
-
 from tqdm import tqdm
 
 from src.core import MODEL_MAP, PRESETS, UpscaleConfig, UpscaleEngine
+
+# Set OpenMP environment variables before importing native modules
+os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["MKL_NUM_THREADS"] = "4"
 
 
 def parse_args():
@@ -108,6 +109,7 @@ def parse_args():
 
 
 def main():
+    multiprocessing.freeze_support()
     args = parse_args()
     input_path = Path(args.input_dir).resolve()
     output_path = Path(args.output_dir).resolve()
@@ -174,4 +176,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

@@ -170,3 +170,18 @@ def test_main_window_close_event(qapp, mocker):
     mock_worker.wait.assert_called_once()
     mock_preview.wait.assert_called_once()
 
+
+def test_freeze_support_invoked(mocker):
+    import multiprocessing
+
+    import src.gui.app as gui_app
+
+    mock_freeze = mocker.patch.object(multiprocessing, "freeze_support")
+    mocker.patch("PySide6.QtWidgets.QApplication.exec", return_value=0)
+    mocker.patch("PySide6.QtWidgets.QWidget.show")
+    mocker.patch("os._exit")
+
+    gui_app.main()
+    mock_freeze.assert_called_once()
+
+

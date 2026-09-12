@@ -1,0 +1,78 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions & native binaries
+*.so
+*.pyd
+*.dll
+
+# Distribution / packaging / PyInstaller
+build/
+dist/
+*.egg-info/
+*.manifest
+*.spec.bak
+
+# Archives & release bundles
+*.zip
+*.tar.gz
+*.tar.xz
+*.7z
+
+# Unit test / coverage reports
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Environments & Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Tooling & Linters
+.ruff_cache/
+.mypy_cache/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+*.bak
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# Project generated outputs & temporary files
+output/
+preview_temp/
+*.log
+tmp/
+temp/
+
+# AI Model Weights & Binary Checkpoints (Prevent committing large files to git)
+weights/
+models/
+*.onnx
+*.pth
+*.pt
+*.bin
+*.param
+*.safetensors
+*.engine
+*.trt
+
+# Multi-Agent Harness (Do not include in git repository)
+.agents/
+AGENTS.md

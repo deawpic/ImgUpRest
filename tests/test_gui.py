@@ -236,3 +236,96 @@ def test_main_window_preview_done_marks_done(qapp, tmp_path):
     assert "sample_x4.jpg" in win.comparison_viewer.lbl_status.text()
 
 
+def test_batch_queue_table_session_save_load_and_smart_resume(qapp, tmp_path: Path):
+    from PIL import Image
+
+    from src.gui.components.drop_zone import BatchQueueTable
+
+    table = BatchQueueTable()
+
+    # Create dummy images
+    img1 = tmp_path / "img1.jpg"
+    img2 = tmp_path / "img2.jpg"
+    img3 = tmp_path / "img3.jpg"
+    for img in (img1, img2, img3):
+        Image.new("RGB", (100, 100)).save(img)
+
+    table.add_paths([img1, img2, img3])
+    assert len(table.get_files()) == 3
+
+    # Mark statuses
+    table.set_file_status(str(img1), "Done", output_path="/tmp/img1_out.png")
+    table.set_file_status(str(img2), "Failed", error="CUDA OOM")
+
+    assert table.get_completed_count() == 1
+    assert table.get_pending_count() == 2
+    pending = table.get_pending_files()
+    assert len(pending) == 2
+    assert img1 not in pending
+    assert img2 in pending
+    assert img3 in pending
+
+    # Test retry failed
+    table.retry_failed()
+    assert table.table.item(1, 3).text() == "Queued"
+    assert table.get_pending_count() == 2
+
+    # Save session to file
+    session_file = tmp_path / "test_queue.json"
+    table.save_session_to_file(session_file, config_dict={"scale": 4})
+    assert session_file.is_file()
+
+    # Clear and reload from file
+    table.clear_all()
+    assert len(table.get_files()) == 0
+    loaded_cfg = table.load_session_from_file(session_file)
+    assert loaded_cfg.get("scale") == 4
+    assert len(table.get_files()) == 3
+    assert table.table.item(0, 3).text() == "Done"
+
+    # Test clear completed
+    table.clear_completed()
+    assert len(table.get_files()) == 2
+    assert table.get_completed_count() == 0
+
+
+def test_main_window_smart_resume_skips_done(qapp, tmp_path: Path, mocker):
+    from PIL import Image
+
+    from src.gui.main_window import MainWindow
+
+    img1 = tmp_path / "a.png"
+    img2 = tmp_path / "b.png"
+    Image.new("RGB", (50, 50)).save(img1)
+    Image.new("RGB", (50, 50)).save(img2)
+
+    win = MainWindow()
+    win.queue_table.add_paths([img1, img2])
+    win.queue_table.set_file_status(str(img1), "Done")
+
+    # Mock UpscaleWorkerThread to inspect config passed to it
+    captured_config = []
+
+    class DummyWorkerThread:
+        def __init__(self, config, parent=None):
+            captured_config.append(config)
+            self.progress_changed = mocker.MagicMock()
+            self.item_completed = mocker.MagicMock()
+            self.log_emitted = mocker.MagicMock()
+            self.finished_result = mocker.MagicMock()
+
+        def start(self):
+            pass
+
+        def isRunning(self):
+            return False
+
+    mocker.patch("src.gui.main_window.UpscaleWorkerThread", DummyWorkerThread)
+
+    win._start_batch()
+    assert len(captured_config) == 1
+    # Only pending img2 should be submitted
+    assert captured_config[0].input_files == [img2]
+
+
+

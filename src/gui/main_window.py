@@ -15,6 +15,11 @@ from PySide6.QtWidgets import (
 )
 
 from src.core import EngineResult, UpscaleConfig, UpscaleEngine
+from src.core.session import (
+    QueueSession,
+    auto_load_session,
+    auto_save_session,
+)
 from src.gui.components.comparison_viewer import ComparisonViewer
 from src.gui.components.control_panel import ControlPanel
 from src.gui.components.drop_zone import BatchQueueTable
@@ -29,6 +34,7 @@ class PreviewWorker(QThread):
 
     preview_done = Signal(str, str)  # (in_file, out_file)
     preview_failed = Signal(str, str)  # (in_file, error)
+    log_emitted = Signal(str, str)  # (message, level)
 
     def __init__(self, in_file: Path, config: UpscaleConfig, parent=None):
         super().__init__(parent)
@@ -46,6 +52,9 @@ class PreviewWorker(QThread):
 
             out_file = output_dir / f"{self.in_file.stem}_x{self.config.scale}.{fmt}"
 
+            def log_callback(msg: str, level: str = "INFO"):
+                self.log_emitted.emit(msg, level)
+
             engine = UpscaleEngine()
             engine.process_single_image(
                 img_path=self.in_file,
@@ -62,6 +71,7 @@ class PreviewWorker(QThread):
                 face_model=self.config.face_model,
                 face_fidelity=self.config.face_fidelity,
                 mask_mouth=self.config.mask_mouth,
+                log_callback=log_callback,
             )
             self.preview_done.emit(str(self.in_file), str(out_file))
         except Exception as e:
@@ -83,6 +93,7 @@ class MainWindow(QMainWindow):
 
         self._setup_ui()
         self._connect_signals()
+        self._auto_restore_session()
 
     def _setup_ui(self):
         central = QWidget(self)
@@ -150,12 +161,47 @@ class MainWindow(QMainWindow):
 
         # File selection for preview & auto output detection
         self.queue_table.file_selected.connect(self._on_file_selected)
+        self.queue_table.session_saved.connect(self._on_session_saved)
+        self.queue_table.session_loaded.connect(self._on_session_loaded)
         self.comparison_viewer.request_preview.connect(self._on_generate_preview)
         self.control_panel.config_changed.connect(self._on_config_changed)
 
         # Execution actions
         self.progress_panel.start_clicked.connect(self._start_batch)
         self.progress_panel.cancel_clicked.connect(self._cancel_batch)
+
+    def _auto_restore_session(self):
+        """Attempts to restore the previously active queue session automatically."""
+        try:
+            session = auto_load_session()
+            if session and session.items:
+                self.queue_table.import_session_items(session.items)
+                total = len(self.queue_table.get_files())
+                if total > 0:
+                    done = self.queue_table.get_completed_count()
+                    pending = self.queue_table.get_pending_count()
+                    self.log_viewer.append_log(
+                        f"Auto-restored previous session: {total} files ({done} completed, {pending} pending).",
+                        "INFO",
+                    )
+        except Exception as e:
+            self.log_viewer.append_log(
+                f"Note: Could not restore previous session: {e}", "WARNING"
+            )
+
+    def _on_session_saved(self, path: str):
+        self.log_viewer.append_log(
+            f"Queue session successfully saved to {Path(path).name}", "SUCCESS"
+        )
+
+    def _on_session_loaded(self, cfg: dict):
+        total = len(self.queue_table.get_files())
+        done = self.queue_table.get_completed_count()
+        pending = self.queue_table.get_pending_count()
+        self.log_viewer.append_log(
+            f"Queue session loaded: {total} files ({done} completed, {pending} pending).",
+            "SUCCESS",
+        )
 
     def _toggle_theme(self):
         self._is_dark = not self._is_dark
@@ -173,8 +219,8 @@ class MainWindow(QMainWindow):
         self.log_viewer.set_theme(self._is_dark)
 
     def _start_batch(self):
-        files = self.queue_table.get_files()
-        if not files:
+        all_files = self.queue_table.get_files()
+        if not all_files:
             QMessageBox.warning(
                 self,
                 "No Files",
@@ -182,8 +228,23 @@ class MainWindow(QMainWindow):
             )
             return
 
+        pending_files = self.queue_table.get_pending_files()
+        if not pending_files:
+            ans = QMessageBox.question(
+                self,
+                "All Items Completed",
+                "All files in the queue are already marked as Done.\nWould you like to reset all items to Queued and re-run?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if ans == QMessageBox.Yes:
+                self.queue_table.reset_all_to_queued()
+                pending_files = self.queue_table.get_files()
+            else:
+                return
+
         config = self.control_panel.get_config()
-        config.input_files = files
+        config.input_files = pending_files
 
         try:
             config.validate()
@@ -195,9 +256,16 @@ class MainWindow(QMainWindow):
         self.progress_panel.set_running_state(True)
         self.tabs.setCurrentIndex(1)  # Switch to Logs tab to monitor progress
 
-        self.log_viewer.append_log(
-            f"Starting upscale batch for {len(files)} files...", "INFO"
-        )
+        completed_count = len(all_files) - len(pending_files)
+        if completed_count > 0:
+            self.log_viewer.append_log(
+                f"Smart Resume: Processing {len(pending_files)} pending files (skipping {completed_count} already completed)...",
+                "INFO",
+            )
+        else:
+            self.log_viewer.append_log(
+                f"Starting upscale batch for {len(pending_files)} files...", "INFO"
+            )
 
         self._worker_thread = UpscaleWorkerThread(config=config, parent=self)
         self._worker_thread.progress_changed.connect(
@@ -207,6 +275,7 @@ class MainWindow(QMainWindow):
         self._worker_thread.log_emitted.connect(self.log_viewer.append_log)
         self._worker_thread.finished_result.connect(self._on_batch_finished)
         self._worker_thread.start()
+
 
     def _cancel_batch(self):
         if self._worker_thread and self._worker_thread.isRunning():
@@ -271,9 +340,9 @@ class MainWindow(QMainWindow):
 
     def _on_item_completed(self, in_file: str, out_file: str, err: str):
         if err:
-            self.queue_table.set_file_status(in_file, "Failed", err)
+            self.queue_table.set_file_status(in_file, "Failed", error=err)
         else:
-            self.queue_table.set_file_status(in_file, "Done")
+            self.queue_table.set_file_status(in_file, "Done", output_path=out_file)
             # If current file in preview matches, show after image
             if (
                 self.comparison_viewer._current_file
@@ -313,6 +382,7 @@ class MainWindow(QMainWindow):
         )
         self._preview_worker.preview_done.connect(self._on_preview_done)
         self._preview_worker.preview_failed.connect(self._on_preview_failed)
+        self._preview_worker.log_emitted.connect(self.log_viewer.append_log)
         self._preview_worker.start()
 
     def _on_preview_done(self, in_file: str, out_file: str):
@@ -323,7 +393,7 @@ class MainWindow(QMainWindow):
         self.comparison_viewer.set_upscaled_result(out_path)
         self.comparison_viewer.btn_preview.setText("🔄 Re-generate Preview")
         self.comparison_viewer.btn_preview.setEnabled(True)
-        self.queue_table.set_file_status(in_file, "Done")
+        self.queue_table.set_file_status(in_file, "Done", output_path=out_file)
         self.log_viewer.append_log(
             f"Preview generated & saved as real output: {out_path.name}", "SUCCESS"
         )
@@ -336,7 +406,25 @@ class MainWindow(QMainWindow):
         self.log_viewer.append_log(f"Preview generation failed: {error}", "ERROR")
 
     def closeEvent(self, event):
-        """Cleanly terminates all background workers and processes upon closing the window."""
+        """Cleanly terminates all background workers and auto-saves the active session."""
+        try:
+            items = self.queue_table.export_session_items()
+            if items:
+                config = self.control_panel.get_config()
+                cfg_dict = {
+                    "scale": config.scale,
+                    "model": config.model,
+                    "output_dir": str(config.output_dir),
+                    "preset": self.control_panel.cmb_preset.currentText(),
+                }
+                session = QueueSession(
+                    config=cfg_dict,
+                    items=items,
+                )
+                auto_save_session(session)
+        except Exception:
+            pass
+
         if self._worker_thread and self._worker_thread.isRunning():
             self._worker_thread.cancel()
             self._worker_thread.wait(1000)
@@ -349,3 +437,4 @@ class MainWindow(QMainWindow):
                 self._preview_worker.terminate()
 
         event.accept()
+

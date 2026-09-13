@@ -40,8 +40,11 @@
 ### 🖥️ Desktop GUI Application (PySide6 / Qt6)
 - **🎯 1-Click Photography Presets**: ปรับแต่งค่าอัตโนมัติตามประเภทภาพในคลิกเดียว (Portrait & Studio, Old Film Scan, Landscape, Anime, Low-Light)
 - **Drag & Drop Batch Queue**: ลากวางไฟล์รูปภาพหลายไฟล์พร้อมกัน หรือลากทั้งโฟลเดอร์ลงบนหน้าต่างแอปได้ทันที ตารางแสดงรายการอ่านง่าย
+- **💾 Save & Load Queue Session (.json)**: บันทึกและโหลดคิวงานเก็บไว้ทำต่อวันหลัง หรือส่งไปรันต่อเครื่องอื่น พร้อมปุ่ม `💾 Save` และ `📂 Load` บนแถบควบคุม
+- **🔄 Auto-Save & Crash Recovery**: จดจำรายการคิวและสถานะล่าสุด (`Done`, `Queued`, `Failed`) อัตโนมัติเมื่อปิดหรือเปิดโปรแกรมใหม่
+- **⏩ Smart Resume & Context Menu**: เมื่อกด Start Batch ระบบจะประมวลผลต่อเฉพาะไฟล์ที่ยังไม่เสร็จ และข้ามไฟล์ที่เสร็จแล้วอัตโนมัติ พร้อมเมนูคลิกขวา: `🔄 Retry Failed Items`, `🧹 Clear Completed`, `↺ Reset All to Queued`
 - **🔍 Interactive Zoom & Pan Before/After Wiper**: ตัวเลื่อนเปรียบเทียบภาพแบบ Split-View Slider พร้อมระบบซูมด้วยล้อเมาส์ (1.0x – 8.0x), คลิกขวา/เมาส์กลางลากเพื่อ Pan, และดับเบิ้ลคลิกเพื่อรีเซ็ต
-- **⚡ Instant Preview**: กดปุ่ม Generate Preview สำหรับรูปที่เลือก เพื่อดูผลลัพธ์โมเดลแบบทันทีก่อนรันทั้ง Batch
+- **⚡ Smart Instant Preview**: กดปุ่ม Generate Preview เพื่อดูผลลัพธ์โมเดลแบบทันทีและบันทึกลงโฟลเดอร์ผลลัพธ์จริง พร้อมสตรีม Progress การดาวน์โหลดโมเดลเข้าหน้าต่าง Log
 - **🌓 Dynamic Theme Switcher**: สลับโหมด Dark Mode (Cyberpunk Dark) และ Light Mode (Clean Slate Light) ได้ทันทีแบบ Real-Time พร้อมจดจำสถานะ
 - **🤖 โมเดล AI ครบวงจร (Default: `x4plus` 4x)**:
   - `x4plus` (ค่าเริ่มต้น): โมเดลคุณภาพสูงสุด เก็บรายละเอียดพื้นผิว Texture ภาพถ่าย ทิวทัศน์ บุคคล

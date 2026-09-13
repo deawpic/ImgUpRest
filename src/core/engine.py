@@ -51,9 +51,10 @@ class UpscaleEngine:
         denoise_strength: int = 0,
         grain_strength: int = 0,
         enable_face_enhance: bool = False,
-        face_model: str = "codeformer",
+        face_model: str = "gfpgan",
         face_fidelity: float = 0.8,
         mask_mouth: bool = False,
+        log_callback: Callable[[str, str], None] | None = None,
     ) -> Path:
         """Synchronously processes a single image. Ideal for GUI preview generation."""
         from realesrgan_ncnn_py import Realesrgan
@@ -70,7 +71,7 @@ class UpscaleEngine:
         if enable_face_enhance:
             from src.core.face_enhancer import ensure_face_enhancer_models
 
-            ensure_face_enhancer_models(model_name=face_model)
+            ensure_face_enhancer_models(model_name=face_model, log_callback=log_callback)
 
         upsampler = Realesrgan(gpuid=gpuid, model=model_id, tilesize=tile_size)
 

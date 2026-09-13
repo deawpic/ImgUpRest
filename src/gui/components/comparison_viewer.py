@@ -163,38 +163,51 @@ class SplitWipeCanvas(QWidget):
         # 2. Draw Left Side: Original (Before)
         if self._pix_before:
             painter.save()
-            painter.setClipRect(QRect(0, 0, split_x, h))
+            if self._pix_after:
+                painter.setClipRect(QRect(0, 0, split_x, h))
+            else:
+                painter.setClipRect(QRect(0, 0, w, h))
             painter.drawPixmap(target_rect, self._pix_before)
             painter.restore()
 
-        # 3. Draw Split Line
-        pen = QPen(QColor("#2563eb"), 2)
-        painter.setPen(pen)
-        painter.drawLine(split_x, 0, split_x, h)
+        # 3. Draw Split Wiper & Labels only when both before and after are present
+        if self._pix_after:
+            # Draw Split Line
+            pen = QPen(QColor("#2563eb"), 2)
+            painter.setPen(pen)
+            painter.drawLine(split_x, 0, split_x, h)
 
-        # 4. Draw Center Handle
-        handle_y = h // 2
-        painter.setBrush(QColor("#2563eb"))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(QPoint(split_x, handle_y), 16, 16)
-        painter.setPen(QColor("#ffffff"))
-        painter.setFont(QFont("sans-serif", 9, QFont.Bold))
-        painter.drawText(
-            QRect(split_x - 16, handle_y - 16, 32, 32),
-            Qt.AlignCenter,
-            "◀▶",
-        )
+            # Draw Center Handle
+            handle_y = h // 2
+            painter.setBrush(QColor("#2563eb"))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(QPoint(split_x, handle_y), 16, 16)
+            painter.setPen(QColor("#ffffff"))
+            painter.setFont(QFont("sans-serif", 9, QFont.Bold))
+            painter.drawText(
+                QRect(split_x - 16, handle_y - 16, 32, 32),
+                Qt.AlignCenter,
+                "◀▶",
+            )
 
-        # 5. Draw Labels
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(15, 23, 42, 190))
-        painter.drawRoundedRect(12, 12, 90, 26, 4, 4)
-        painter.drawRoundedRect(w - 106, 12, 94, 26, 4, 4)
+            # Draw ORIGINAL & UPSCALED Badges
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(15, 23, 42, 190))
+            painter.drawRoundedRect(12, 12, 90, 26, 4, 4)
+            painter.drawRoundedRect(w - 106, 12, 94, 26, 4, 4)
 
-        painter.setPen(QColor("#ffffff"))
-        painter.setFont(QFont("sans-serif", 10, QFont.Bold))
-        painter.drawText(QRect(12, 12, 90, 26), Qt.AlignCenter, "ORIGINAL")
-        painter.drawText(QRect(w - 106, 12, 94, 26), Qt.AlignCenter, "UPSCALED")
+            painter.setPen(QColor("#ffffff"))
+            painter.setFont(QFont("sans-serif", 10, QFont.Bold))
+            painter.drawText(QRect(12, 12, 90, 26), Qt.AlignCenter, "ORIGINAL")
+            painter.drawText(QRect(w - 106, 12, 94, 26), Qt.AlignCenter, "UPSCALED")
+        elif self._pix_before:
+            # Only Original badge
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(15, 23, 42, 190))
+            painter.drawRoundedRect(12, 12, 90, 26, 4, 4)
+            painter.setPen(QColor("#ffffff"))
+            painter.setFont(QFont("sans-serif", 10, QFont.Bold))
+            painter.drawText(QRect(12, 12, 90, 26), Qt.AlignCenter, "ORIGINAL")
 
         # 6. Draw Zoom & Pan HUD indicator
         zoom_pct = int(self._zoom * 100)
@@ -270,10 +283,18 @@ class ComparisonViewer(QWidget):
         self._current_file = Path(file_path)
         self.lbl_status.setText(f"🔍 Inspecting: {self._current_file.name}")
         self.btn_preview.setEnabled(True)
+        self.btn_preview.setText("⚡ Generate Preview")
         self.canvas.set_before_image(self._current_file)
 
     def set_upscaled_result(self, upscaled_path: Path):
         self.canvas.set_after_image(upscaled_path)
+        self.btn_preview.setText("🔄 Re-generate Preview")
+        self.btn_preview.setEnabled(True)
+
+    def clear_preview(self):
+        self.canvas.set_after_image(None)
+        self.btn_preview.setText("⚡ Generate Preview")
+        self.btn_preview.setEnabled(True)
 
     def _on_preview_clicked(self):
         if self._current_file:

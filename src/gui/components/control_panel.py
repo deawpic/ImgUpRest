@@ -159,14 +159,14 @@ class ControlPanel(QWidget):
 
         self.cmb_face_model = QComboBox()
         self.cmb_face_model.addItem(
-            "CodeFormer (Natural Teeth & Identity - Best for Smiles)", "codeformer"
+            "GFPGAN v1.4 (Default - Stable Eyes, Glasses & Angled Faces)", "gfpgan"
         )
         self.cmb_face_model.addItem(
-            "GFPGAN v1.4 (Skin Texture - Best for Closed Mouth)", "gfpgan"
+            "CodeFormer (Best for Smiles & Teeth / Frontal Faces)", "codeformer"
         )
         self.cmb_face_model.setToolTip(
-            "• CodeFormer: Best for smiling portraits (prevents extra teeth/hallucinations).\n"
-            "• GFPGAN v1.4: Best for closed-mouth portraits (enhances skin/hair texture)."
+            "• GFPGAN v1.4 (Default): Best for eye stability (never produces double eyes), angled faces, glasses, and skin texture.\n"
+            "• CodeFormer: Best for frontal smiling portraits (prevents extra teeth). If angled or wearing glasses, may produce double eyes."
         )
         self.cmb_face_model.setEnabled(False)
 
@@ -410,7 +410,7 @@ class ControlPanel(QWidget):
         grain_strength = self.slider_grain.value()
         enable_face_enhance = self.chk_face_enhance.isChecked()
         mask_mouth = self.chk_mask_mouth.isChecked() and enable_face_enhance
-        face_model = self.cmb_face_model.currentData() or "codeformer"
+        face_model = self.cmb_face_model.currentData() or "gfpgan"
         face_fidelity = self.slider_fidelity.value() / 100.0
         quality = self.slider_quality.value()
         output_dir = Path(self.txt_output_dir.text()).resolve()

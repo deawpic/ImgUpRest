@@ -25,7 +25,7 @@ from src.gui.worker_thread import UpscaleWorkerThread
 
 
 class PreviewWorker(QThread):
-    """Generates an instant upscaled preview for a single image."""
+    """Generates an instant upscaled preview for a single image and saves it to real output."""
 
     preview_done = Signal(str, str)  # (in_file, out_file)
     preview_failed = Signal(str, str)  # (in_file, error)
@@ -37,11 +37,14 @@ class PreviewWorker(QThread):
 
     def run(self):
         try:
-            preview_dir = Path.cwd() / "output" / ".preview"
-            preview_dir.mkdir(parents=True, exist_ok=True)
-            out_file = (
-                preview_dir / f"preview_{self.in_file.stem}_x{self.config.scale}.jpg"
-            )
+            output_dir = Path(self.config.output_dir).resolve()
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            fmt = self.config.output_format.lower().lstrip(".")
+            if fmt == "jpeg":
+                fmt = "jpg"
+
+            out_file = output_dir / f"{self.in_file.stem}_x{self.config.scale}.{fmt}"
 
             engine = UpscaleEngine()
             engine.process_single_image(
@@ -52,7 +55,7 @@ class PreviewWorker(QThread):
                 tile_size=self.config.tile_size,
                 quality=self.config.quality,
                 gpuid=self.config.gpuid if self.config.enable_gpu else -1,
-                output_format="jpg",
+                output_format=fmt,
                 denoise_strength=self.config.denoise_strength,
                 grain_strength=self.config.grain_strength,
                 enable_face_enhance=self.config.enable_face_enhance,
@@ -145,9 +148,10 @@ class MainWindow(QMainWindow):
         # Theme toggle
         self.btn_theme.clicked.connect(self._toggle_theme)
 
-        # File selection for preview
-        self.queue_table.file_selected.connect(self.comparison_viewer.set_selected_file)
+        # File selection for preview & auto output detection
+        self.queue_table.file_selected.connect(self._on_file_selected)
         self.comparison_viewer.request_preview.connect(self._on_generate_preview)
+        self.control_panel.config_changed.connect(self._on_config_changed)
 
         # Execution actions
         self.progress_panel.start_clicked.connect(self._start_batch)
@@ -209,6 +213,62 @@ class MainWindow(QMainWindow):
             self.log_viewer.append_log("Cancellation requested...", "WARNING")
             self._worker_thread.cancel()
 
+    def _on_file_selected(self, file_path: str):
+        self.comparison_viewer.set_selected_file(file_path)
+        self._check_existing_output_for_selected(file_path)
+
+    def _on_config_changed(self):
+        """Re-evaluates preview availability if settings change (e.g. scale or output folder)."""
+        if self.comparison_viewer._current_file:
+            self._check_existing_output_for_selected(
+                str(self.comparison_viewer._current_file)
+            )
+
+    def _find_existing_output(
+        self, in_file: Path, config: UpscaleConfig
+    ) -> Path | None:
+        """Checks whether an upscaled output file for this image already exists in output_dir."""
+        output_dir = Path(config.output_dir).resolve()
+        if not output_dir.is_dir():
+            return None
+
+        stem = in_file.stem
+        scale = config.scale
+        fmt = config.output_format.lower().lstrip(".")
+        if fmt == "jpeg":
+            fmt = "jpg"
+
+        preferred = output_dir / f"{stem}_x{scale}.{fmt}"
+        if preferred.is_file():
+            return preferred
+
+        # Fallback to check other common image formats at requested scale
+        for ext in (".jpg", ".jpeg", ".png", ".webp"):
+            candidate = output_dir / f"{stem}_x{scale}{ext}"
+            if candidate.is_file():
+                return candidate
+
+        return None
+
+    def _check_existing_output_for_selected(self, file_path: str):
+        in_path = Path(file_path)
+        config = self.control_panel.get_config()
+        existing = self._find_existing_output(in_path, config)
+
+        if existing:
+            self.comparison_viewer.set_upscaled_result(existing)
+            self.comparison_viewer.lbl_status.setText(
+                f"🔍 Ready (Output exists): {existing.name}"
+            )
+            self.comparison_viewer.btn_preview.setText("🔄 Re-generate Preview")
+            self.comparison_viewer.btn_preview.setEnabled(True)
+            self.queue_table.set_file_status(file_path, "Done")
+        else:
+            self.comparison_viewer.clear_preview()
+            self.comparison_viewer.lbl_status.setText(f"🔍 Inspecting: {in_path.name}")
+            self.comparison_viewer.btn_preview.setText("⚡ Generate Preview")
+            self.comparison_viewer.btn_preview.setEnabled(True)
+
     def _on_item_completed(self, in_file: str, out_file: str, err: str):
         if err:
             self.queue_table.set_file_status(in_file, "Failed", err)
@@ -220,6 +280,10 @@ class MainWindow(QMainWindow):
                 and str(self.comparison_viewer._current_file) == in_file
             ):
                 self.comparison_viewer.set_upscaled_result(Path(out_file))
+                self.comparison_viewer.lbl_status.setText(
+                    f"🔍 Ready (Output saved): {Path(out_file).name}"
+                )
+                self.comparison_viewer.btn_preview.setText("🔄 Re-generate Preview")
 
     def _on_batch_finished(self, result: EngineResult):
         self.progress_panel.set_finished_state(
@@ -236,9 +300,13 @@ class MainWindow(QMainWindow):
     def _on_generate_preview(self, file_path: str):
         config = self.control_panel.get_config()
         self.log_viewer.append_log(
-            f"Generating preview for {Path(file_path).name}...", "INFO"
+            f"Generating preview & saving real output to {config.output_dir} for {Path(file_path).name}...",
+            "INFO",
         )
-        self.comparison_viewer.lbl_status.setText("Generating preview...")
+        self.comparison_viewer.lbl_status.setText(
+            "⚡ Generating preview & saving output..."
+        )
+        self.comparison_viewer.btn_preview.setEnabled(False)
 
         self._preview_worker = PreviewWorker(
             in_file=Path(file_path), config=config, parent=self
@@ -248,18 +316,23 @@ class MainWindow(QMainWindow):
         self._preview_worker.start()
 
     def _on_preview_done(self, in_file: str, out_file: str):
+        out_path = Path(out_file)
         self.comparison_viewer.lbl_status.setText(
-            f"🔍 Preview Ready: {Path(in_file).name}"
+            f"🔍 Preview Ready: {out_path.name}"
         )
-        self.comparison_viewer.set_upscaled_result(Path(out_file))
+        self.comparison_viewer.set_upscaled_result(out_path)
+        self.comparison_viewer.btn_preview.setText("🔄 Re-generate Preview")
+        self.comparison_viewer.btn_preview.setEnabled(True)
+        self.queue_table.set_file_status(in_file, "Done")
         self.log_viewer.append_log(
-            f"Preview generated: {Path(out_file).name}", "SUCCESS"
+            f"Preview generated & saved as real output: {out_path.name}", "SUCCESS"
         )
 
     def _on_preview_failed(self, in_file: str, error: str):
         self.comparison_viewer.lbl_status.setText(
             f"❌ Preview Failed: {Path(in_file).name}"
         )
+        self.comparison_viewer.btn_preview.setEnabled(True)
         self.log_viewer.append_log(f"Preview generation failed: {error}", "ERROR")
 
     def closeEvent(self, event):

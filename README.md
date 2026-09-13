@@ -47,7 +47,7 @@
   - `x4plus` (ค่าเริ่มต้น): โมเดลคุณภาพสูงสุด เก็บรายละเอียดพื้นผิว Texture ภาพถ่าย ทิวทัศน์ บุคคล
   - `x4plus-anime`: ลายเส้นคมกริบ สำหรับงานดิจิทัลอาร์ตและการ์ตูน 4K
   - `animevideov3`: ความเร็วสูงสุด เหมาะกับภาพอนิเมะ การ์ตูน สกรีนช็อต (Native 2x)
-- **👤 Face Enhancement (CodeFormer / GFPGAN ONNX)**: กู้คืนรายละเอียดดวงตา ผิว ฟัน และโครงหน้ามนุษย์ด้วย AI (Default: CodeFormer Fidelity 0.80 ไร้ปัญหาฟันซ้อน) ทำงานผ่าน ONNX Runtime น้ำหนักเบา
+- **👤 Face Enhancement (GFPGAN / CodeFormer ONNX)**: กู้คืนรายละเอียดดวงตา ผิว ฟัน และโครงหน้ามนุษย์ด้วย AI (Default: GFPGAN v1.4 ตรึงพิกัดตาแม่นยำ ไร้ปัญหาตาซ้อน) ทำงานผ่าน ONNX Runtime น้ำหนักเบา
 - **👄 Preserve Real Smile (มาสก์ฟัน & รอยยิ้มเดิม)**: ระบบ Selective Feature Masking ช่วยเบลนด์ฟันและริมฝีปากจริงของภาพเดิมกลับลงไปอย่างแนบเนียน กำจัดอาการฟันเกิน ฟันหลอกตา (AI Hallucination) และรอยยิ้มปลอม 100% ขณะที่ผิวหน้าและดวงตายังคงคมชัดระดับสตูดิโอ (เปิดอัตโนมัติใน Preset `portrait`)
 - **🎞️ Natural Monochromatic Film Grain (0–10%)**: เติมเกรนฟิล์ม 35mm อิงความสว่าง Midtones กำจัดอาการผิวหุ่นขี้ผึ้ง (Waxy Skin) คืนชีวิตชีวาและ Micro-contrast ให้ผิวสมจริง
 - **📷 EXIF Metadata & ICC Profile Preservation**: ถ่ายโอนข้อมูลกล้อง เลนส์ วันที่ ค่าเปิดรับแสง และ Color Profile (sRGB, Display P3, Adobe RGB) จากภาพต้นฉบับไปยังไฟล์ผลลัพธ์ 100%
@@ -190,8 +190,8 @@ uv run python upscale.py -i <INPUT_DIR> -o <OUTPUT_DIR> [OPTIONS]
 | `-c` | `--cpu_workers` | `int` | `3` | จำนวน Worker ฝั่ง CPU (แนะนำ: `3` สำหรับ 6-core) |
 | `-d` | `--denoise` | `int` | `0` | ระดับลด Noise `0-100` (Default: `0` เพื่อคงเกรนและผิวธรรมชาติ) |
 | `-g` | `--grain` | `int` | `0` | ระดับเกรนฟิล์ม 35mm `0-10` (Default: `0` ปิด, แนะนำ `2-3` สำหรับคน) |
-| `-f` | `--face_enhance` | - | `False` | เปิดใช้งาน AI Face Enhancement (CodeFormer / GFPGAN) |
-| | `--face_model` | `str` | `codeformer` | เลือกรุ่นโมเดลหน้า: `codeformer`, `gfpgan` (Default: `codeformer`) |
+| `-f` | `--face_enhance` | - | `False` | เปิดใช้งาน AI Face Enhancement (GFPGAN / CodeFormer) |
+| | `--face_model` | `str` | `gfpgan` | เลือกรุ่นโมเดลหน้า: `gfpgan`, `codeformer` (Default: `gfpgan`) |
 | | `--face_fidelity` | `float` | `0.8` | ค่าน้ำหนักความสมดุลใบหน้าเดิม `0.0 - 1.0` (Default: `0.8`) |
 | `-mm` | `--mask_mouth` | - | `False` | มาสก์ฟันและรอยยิ้มเดิม (Preserve Real Smile) ป้องกันฟันเกิน/รอยยิ้มเพี้ยน |
 | `-h` | `--help` | - | - | แสดงข้อความช่วยเหลือและพารามิเตอร์ทั้งหมด |
@@ -236,9 +236,46 @@ uv run python upscale.py -i <INPUT_DIR> -o <OUTPUT_DIR> [OPTIONS]
 | **5** | **Platform-Standard Data Directory** (Persistent Storage) | 🐧 **Linux**: `~/.local/share/real_esrgan_gui/weights/` (มาตรฐาน XDG ปลอดภัยจากการถูกล้างแคช)<br>🪟 **Windows**: `%LOCALAPPDATA%\real_esrgan_gui\weights\`<br>🍎 **macOS**: `~/Library/Application Support/real_esrgan_gui/weights/` |
 | **6** | **Legacy Cache Fallback** (`~/.cache/real_esrgan_gui/weights/`) | ตรวจสอบโฟลเดอร์แคชเดิม เพื่อให้ผู้ใช้เดิมใช้งานต่อได้ทันทีโดยไม่ต้องดาวน์โหลดซ้ำ |
 
+#### 🔗 ลิงก์ดาวน์โหลดไฟล์โมเดลเสริมโดยตรง (Supplementary Face Models Direct Download Links)
+
+สำหรับผู้ใช้ที่ต้องการดาวน์โหลดไฟล์โมเดลล่วงหน้า (เช่น นำไปใช้กับเครื่องออฟไลน์ ไม่ต่ออินเทอร์เน็ต หรือกรณีดาวน์โหลดอัตโนมัติผ่านแอปไม่สำเร็จ) สามารถคลิกลิงก์ดาวน์โหลดตรงได้จากตารางด้านล่างนี้:
+
+| ชื่อโมเดล | ชื่อไฟล์ (.onnx) | ขนาดไฟล์ | ลิงก์ดาวน์โหลดโดยตรง (Direct Download) | หน้าที่และคำแนะนำการใช้งาน |
+| :--- | :--- | :---: | :---: | :--- |
+| **YuNet Face Detector** | `face_detection_yunet_2023mar.onnx` | ~228 KB | [🔗 ดาวน์โหลด YuNet](https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx) | **จำเป็นต้องมี**: โมเดลตรวจจับตำแหน่งใบหน้าและจุด Landmark 5 จุด น้ำหนักเบา ความเร็วสูงพิเศษ |
+| **GFPGAN v1.4** | `GFPGANv1.4.onnx` | ~340 MB | [🔗 ดาวน์โหลด GFPGAN v1.4](https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/GFPGANv1.4.onnx) | **แนะนำสำหรับภาพมุมเอียง / ใส่แว่น / ตาธรรมชาติ**: ใช้ Continuous Latent GAN ตรึงพิกัดตาแม่นยำ **ไร้ปัญหาตาซ้อน 100%** |
+| **CodeFormer** | `codeformer.onnx` | ~376 MB | [🔗 ดาวน์โหลด CodeFormer](https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/codeformer.onnx) | **แนะนำสำหรับภาพหน้าตรงบุคคลยิ้มเห็นฟัน**: ใช้ Discrete Codebook กู้คืนรูปฟันแท้และเค้าโครงหน้าคมกริบ ไร้ปัญหาฟันหลอน |
+
+> [!TIP]
+> 👁️ **ทำไมบางภาพใช้ CodeFormer แล้วเกิด "ตาซ้อนกัน" (Double Eyes) แต่ GFPGAN ตาปกติไม่มั่ว?**:
+> - **สาเหตุทางเทคนิค**: CodeFormer ใช้ Transformer ทำนายรหัสจาก Discrete Codebook ซึ่งถูกเทรนด้วยภาพหน้าตรงมองกล้องเป็นหลัก หากเจอดวงตาที่มองเหลือบ, ใบหน้าเอียงหันข้าง, คนใส่แว่นตา, มีแสงสะท้อนที่เลนส์ หรือมีผมตกลงมาบังตา Transformer อาจสับสนพิกัดแล้วหยิบดวงตามองตรงจาก Codebook มาแปะซ้อน ทำให้เกิด **ลูกตาหรือเปลือกตาเพิ่มขึ้นมาซ้อนกัน (Phantom / Double Eyes)**
+> - **GFPGAN ทำไมถึงไม่มั่ว?**: GFPGAN ใช้ระบบ Spatial Feature Transform (SFT) ที่แมปพิกัดดวงตาแบบจุดต่อจุด (Continuous Latent Mapping) จึง**ตรึงตำแหน่งดวงตาได้ถูกต้อง 100% ไม่สร้างตาซ้อน**
+> - **วิธีแก้ปัญหา**:
+>   1. **สลับไปใช้โมเดล `GFPGAN`**: เลือกโมเดลหน้าเป็น GFPGAN ทันที จะได้ดวงตาที่เป็นธรรมชาติ ถูกต้อง ไม่มั่ว 100%
+>   2. **หากต้องการใช้ CodeFormer ต่อ**: ให้ปรับค่า **Fidelity Weight ขึ้นเป็น `0.85 – 0.95`** เพื่อบังคับให้ AI ยึดพิกัดดวงตาเดิมจากภาพมากขึ้น
+>   3. **หากกังวลเรื่องฟันซ้อนใน GFPGAN**: ให้ติ๊กเปิด **`Preserve Real Smile`** (`--mask_mouth` / `-mm`) ระบบจะมาสก์ดึงฟันแท้จริงจากภาพเดิมมาใช้โดยอัตโนมัติ
+
+#### 📥 คำสั่งดาวน์โหลดผ่าน Terminal / Command Line (ทางลัด)
+
+##### 🐧 บน Linux / macOS (ดาวน์โหลดใส่โฟลเดอร์ weights):
+```bash
+mkdir -p weights
+curl -L -o weights/face_detection_yunet_2023mar.onnx "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+curl -L -o weights/GFPGANv1.4.onnx "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/GFPGANv1.4.onnx"
+curl -L -o weights/codeformer.onnx "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/codeformer.onnx"
+```
+
+##### 🪟 บน Windows (PowerShell):
+```powershell
+New-Item -ItemType Directory -Force -Path weights
+Invoke-WebRequest -Uri "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -OutFile "weights\face_detection_yunet_2023mar.onnx"
+Invoke-WebRequest -Uri "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/GFPGANv1.4.onnx" -OutFile "weights\GFPGANv1.4.onnx"
+Invoke-WebRequest -Uri "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/codeformer.onnx" -OutFile "weights\codeformer.onnx"
+```
+
 > [!TIP]
 > 🎒 **วิธีพกพาไปใช้งานแบบ 100% Offline (Portable Mode)**:
-> หากต้องการนำโปรแกรมใส่ Flash Drive ไปเปิดใช้งานบนเครื่องที่ไม่มีอินเทอร์เน็ต เพียงสร้างโฟลเดอร์ชื่อ `weights` ไว้ข้างโปรแกรม แล้วนำไฟล์ `.onnx` ไปใส่ไว้ โปรแกรมจะหยิบโมเดลจาก Flash Drive มาใช้งานทันทีโดยไม่ต้องต่อเน็ต
+> หากต้องการนำโปรแกรมใส่ Flash Drive ไปเปิดใช้งานบนเครื่องที่ไม่มีอินเทอร์เน็ต เพียงสร้างโฟลเดอร์ชื่อ `weights` ไว้ข้างไฟล์โปรแกรมหรือข้างไฟล์ `.exe` แล้วนำไฟล์ `.onnx` ทั้ง 3 ไฟล์ไปใส่ไว้ โปรแกรมจะหยิบโมเดลจาก Flash Drive มาใช้งานทันทีโดยไม่ต้องต่อเน็ต
 > 
 > ⚙️ **การย้ายโฟลเดอร์โมเดลผ่าน Environment Variable**:
 > - **บน Linux**: `export REAL_ESRGAN_WEIGHTS_DIR="/mnt/storage/ai_models"`

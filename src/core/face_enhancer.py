@@ -271,7 +271,7 @@ def download_weight_file(
 
 
 def ensure_face_enhancer_models(
-    model_name: str = "codeformer",
+    model_name: str = "gfpgan",
     custom_dir: Path | None = None,
     log_callback: Callable[[str, str], None] | None = None,
 ) -> tuple[Path, Path]:
@@ -315,7 +315,7 @@ class FaceEnhancer:
 
     def __init__(
         self,
-        model_name: str = "codeformer",
+        model_name: str = "gfpgan",
         fidelity_weight: float = 0.8,
         mask_mouth: bool = False,
         weights_dir: Path | None = None,

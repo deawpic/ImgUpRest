@@ -57,7 +57,7 @@ def test_control_panel_config(qapp):
     assert config.denoise_strength == 0
     assert config.grain_strength == 0
     assert config.enable_face_enhance is False
-    assert config.face_model == "codeformer"
+    assert config.face_model == "gfpgan"
     assert abs(config.face_fidelity - 0.8) < 1e-4
     assert config.mask_mouth is False
 
@@ -67,7 +67,7 @@ def test_control_panel_config(qapp):
     portrait_cfg = panel.get_config()
     assert portrait_cfg.grain_strength == 2
     assert portrait_cfg.enable_face_enhance is True
-    assert portrait_cfg.face_model == "codeformer"
+    assert portrait_cfg.face_model == "gfpgan"
     assert abs(portrait_cfg.face_fidelity - 0.80) < 1e-4
     assert portrait_cfg.mask_mouth is True
 
@@ -183,5 +183,56 @@ def test_freeze_support_invoked(mocker):
 
     gui_app.main()
     mock_freeze.assert_called_once()
+
+
+def test_main_window_auto_detects_existing_output(qapp, tmp_path):
+    from PIL import Image
+
+    from src.gui.main_window import MainWindow
+
+    # Setup dummy input and output directories
+    in_img = tmp_path / "photo1.png"
+    Image.new("RGB", (50, 50), color="red").save(in_img)
+
+    out_dir = tmp_path / "output"
+    out_dir.mkdir()
+    out_img = out_dir / "photo1_x4.jpg"
+    Image.new("RGB", (200, 200), color="blue").save(out_img)
+
+    win = MainWindow()
+    win.control_panel.txt_output_dir.setText(str(out_dir))
+    win.queue_table.add_paths([in_img])
+
+    # Select the file row in the queue table
+    win._on_file_selected(str(in_img))
+
+    # Should detect existing output in out_dir
+    assert win.comparison_viewer.btn_preview.text() == "🔄 Re-generate Preview"
+    assert "Output exists" in win.comparison_viewer.lbl_status.text()
+    assert win.comparison_viewer.canvas._pix_after is not None
+    # Table status should be marked Done
+    assert win.queue_table.table.item(0, 3).text() == "Done"
+
+
+def test_main_window_preview_done_marks_done(qapp, tmp_path):
+    from PIL import Image
+
+    from src.gui.main_window import MainWindow
+
+    in_img = tmp_path / "sample.png"
+    Image.new("RGB", (50, 50), color="green").save(in_img)
+    out_img = tmp_path / "sample_x4.jpg"
+    Image.new("RGB", (200, 200), color="yellow").save(out_img)
+
+    win = MainWindow()
+    win.queue_table.add_paths([in_img])
+    win.comparison_viewer.set_selected_file(str(in_img))
+
+    # Simulate preview completed
+    win._on_preview_done(str(in_img), str(out_img))
+
+    assert win.queue_table.table.item(0, 3).text() == "Done"
+    assert win.comparison_viewer.btn_preview.text() == "🔄 Re-generate Preview"
+    assert "sample_x4.jpg" in win.comparison_viewer.lbl_status.text()
 
 

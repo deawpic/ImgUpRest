@@ -26,7 +26,7 @@ class UpscaleConfig:
     output_format: str = "jpg"
     denoise_strength: int = 0
     enable_face_enhance: bool = False
-    face_model: str = "codeformer"
+    face_model: str = "gfpgan"
     face_fidelity: float = 0.8
     grain_strength: int = 0
     mask_mouth: bool = False

@@ -26,7 +26,7 @@ def test_apply_preset_to_config():
     assert cfg.denoise_strength == 0
     assert cfg.grain_strength == 2
     assert cfg.enable_face_enhance is True
-    assert cfg.face_model == "codeformer"
+    assert cfg.face_model == "gfpgan"
     assert cfg.face_fidelity == 0.80
     assert cfg.mask_mouth is True
 

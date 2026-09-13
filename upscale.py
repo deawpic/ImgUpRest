@@ -89,9 +89,9 @@ def parse_args():
     parser.add_argument(
         "--face_model",
         type=str,
-        default="codeformer",
+        default="gfpgan",
         choices=["codeformer", "gfpgan"],
-        help="Face enhancement model (default: codeformer)",
+        help="Face enhancement model (default: gfpgan)",
     )
     parser.add_argument(
         "--face_fidelity",

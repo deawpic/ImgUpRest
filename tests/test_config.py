@@ -17,7 +17,7 @@ def test_default_config():
     assert config.denoise_strength == 0
     assert config.grain_strength == 0
     assert config.enable_face_enhance is False
-    assert config.face_model == "codeformer"
+    assert config.face_model == "gfpgan"
     assert abs(config.face_fidelity - 0.8) < 1e-4
     assert config.mask_mouth is False
 

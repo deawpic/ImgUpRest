@@ -20,18 +20,23 @@ class QueueItemData:
     resolution: str = "-"
     output_path: str | None = None
     error: str | None = None
+    destination_dir: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "QueueItemData":
+    def from_dict(
+        cls, data: dict, fallback_destination: str | None = None
+    ) -> "QueueItemData":
+        dest = data.get("destination_dir") or fallback_destination
         return cls(
             file_path=str(data.get("file_path", "")),
             status=str(data.get("status", "Queued")),
             resolution=str(data.get("resolution", "-")),
             output_path=data.get("output_path"),
             error=data.get("error"),
+            destination_dir=str(dest) if dest else None,
         )
 
 
@@ -55,18 +60,26 @@ class QueueSession:
     @classmethod
     def from_dict(cls, data: dict) -> "QueueSession":
         raw_items = data.get("items", [])
-        items = [QueueItemData.from_dict(item) for item in raw_items]
+        cfg = dict(data.get("config", {}))
+        fallback_dest = cfg.get("output_dir")
+        items = [
+            QueueItemData.from_dict(item, fallback_destination=fallback_dest)
+            for item in raw_items
+        ]
         return cls(
             version=str(data.get("version", "1.0")),
             saved_at=str(data.get("saved_at", datetime.now().isoformat())),
-            config=dict(data.get("config", {})),
+            config=cfg,
             items=items,
         )
 
 
-def save_session(session: QueueSession, file_path: Path) -> None:
+
+def save_session(session: QueueSession, file_path: Path) -> Path:
     """Saves a queue session to disk as formatted JSON using atomic replacement."""
     target = Path(file_path).resolve()
+    if target.suffix.lower() != ".json":
+        target = target.with_suffix(".json")
     target.parent.mkdir(parents=True, exist_ok=True)
     temp_path = target.parent / f"{target.name}.tmp"
 
@@ -76,11 +89,15 @@ def save_session(session: QueueSession, file_path: Path) -> None:
 
     temp_path.replace(target)
     logger.info(f"Saved session with {len(session.items)} items to {target}")
+    return target
 
 
 def load_session(file_path: Path) -> QueueSession:
     """Loads and deserializes a queue session from disk."""
     target = Path(file_path).resolve()
+    if not target.is_file() and target.with_suffix(".json").is_file():
+        target = target.with_suffix(".json")
+
     if not target.is_file():
         raise FileNotFoundError(f"Session file not found: {target}")
 

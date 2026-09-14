@@ -87,7 +87,24 @@ def worker_process(
             # Poison pill received: shutdown worker
             break
 
-        img_file = Path(item)
+        target_out_file: Path | None = None
+        target_out_dir = output_path
+
+        if isinstance(item, tuple):
+            img_file = Path(item[0])
+            if len(item) > 2 and item[2]:
+                target_out_file = Path(item[2])
+                target_out_dir = target_out_file.parent
+            elif len(item) > 1 and item[1]:
+                target_out_dir = Path(item[1])
+        else:
+            img_file = Path(item)
+
+        if target_out_file is None:
+            target_out_file = target_out_dir / f"{img_file.stem}_x{scale}.{fmt}"
+
+        target_out_file.parent.mkdir(parents=True, exist_ok=True)
+
         try:
             with Image.open(img_file) as im:
                 rgb_im = im.convert("RGB")
@@ -120,10 +137,11 @@ def worker_process(
 
                     out_im = Image.fromarray(cv2.cvtColor(np_bgr, cv2.COLOR_BGR2RGB))
 
-                out_file = output_path / f"{img_file.stem}_x{scale}.{fmt}"
+                out_file = target_out_file
                 metadata = extract_image_metadata(img_file)
                 save_kwargs = get_save_kwargs(metadata, fmt, quality=quality)
                 out_im.save(out_file, **save_kwargs)
+
 
             progress_queue.put((True, str(img_file), str(out_file), None))
         except Exception as e:

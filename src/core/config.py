@@ -30,9 +30,10 @@ class UpscaleConfig:
     face_fidelity: float = 0.8
     grain_strength: int = 0
     mask_mouth: bool = False
+    file_destinations: dict[str, str] = field(default_factory=dict)
 
     def resolve_files(self) -> list[Path]:
-        """Resolves and returns all valid image files to process."""
+        """Resolves and returns all valid image files to process, scanning subfolders recursively."""
         files: list[Path] = []
         if self.input_files:
             for p in self.input_files:
@@ -42,7 +43,7 @@ class UpscaleConfig:
         elif self.input_path:
             p = Path(self.input_path).resolve()
             if p.is_dir():
-                for item in p.iterdir():
+                for item in p.rglob("*"):
                     if item.is_file() and item.suffix.lower() in SUPPORTED_EXTS:
                         files.append(item)
             elif p.is_file() and p.suffix.lower() in SUPPORTED_EXTS:
@@ -99,3 +100,23 @@ class UpscaleConfig:
             raise ValueError(
                 f"Grain strength must be between 0 and 10. Got: {self.grain_strength}"
             )
+
+    def to_dict(self) -> dict:
+        """Serializes configuration into a JSON-compatible dictionary."""
+        return {
+            "scale": self.scale,
+            "model": self.model,
+            "quality": self.quality,
+            "tile_size": self.tile_size,
+            "output_dir": str(self.output_dir),
+            "output_format": self.output_format,
+            "enable_gpu": self.enable_gpu,
+            "gpuid": self.gpuid,
+            "cpu_workers": self.cpu_workers,
+            "denoise_strength": self.denoise_strength,
+            "enable_face_enhance": self.enable_face_enhance,
+            "face_model": self.face_model,
+            "face_fidelity": self.face_fidelity,
+            "grain_strength": self.grain_strength,
+            "mask_mouth": self.mask_mouth,
+        }

@@ -165,6 +165,15 @@ class MainWindow(QMainWindow):
         self.queue_table.session_loaded.connect(self._on_session_loaded)
         self.comparison_viewer.request_preview.connect(self._on_generate_preview)
         self.control_panel.config_changed.connect(self._on_config_changed)
+        self.control_panel.txt_output_dir.textChanged.connect(
+            self.queue_table.set_default_destination
+        )
+        self.queue_table.set_default_destination(
+            self.control_panel.txt_output_dir.text()
+        )
+        self.queue_table.config_provider = (
+            lambda: self.control_panel.get_config().to_dict()
+        )
 
         # Execution actions
         self.progress_panel.start_clicked.connect(self._start_batch)
@@ -198,6 +207,8 @@ class MainWindow(QMainWindow):
         total = len(self.queue_table.get_files())
         done = self.queue_table.get_completed_count()
         pending = self.queue_table.get_pending_count()
+        if "output_dir" in cfg and cfg["output_dir"]:
+            self.queue_table.set_default_destination(cfg["output_dir"])
         self.log_viewer.append_log(
             f"Queue session loaded: {total} files ({done} completed, {pending} pending).",
             "SUCCESS",
@@ -245,6 +256,11 @@ class MainWindow(QMainWindow):
 
         config = self.control_panel.get_config()
         config.input_files = pending_files
+        config.file_destinations = {
+            str(f): self.queue_table.get_file_destination(str(f))
+            for f in pending_files
+            if self.queue_table.get_file_destination(str(f))
+        }
 
         try:
             config.validate()
@@ -296,9 +312,11 @@ class MainWindow(QMainWindow):
     def _find_existing_output(
         self, in_file: Path, config: UpscaleConfig
     ) -> Path | None:
-        """Checks whether an upscaled output file for this image already exists in output_dir."""
-        output_dir = Path(config.output_dir).resolve()
-        if not output_dir.is_dir():
+        """Checks whether an upscaled output file for this image already exists in output_dir or custom destination."""
+        item_dest = self.queue_table.get_file_destination(str(in_file))
+        dest_dir = Path(item_dest) if item_dest else Path(config.output_dir)
+        dest_dir = dest_dir.resolve()
+        if not dest_dir.is_dir():
             return None
 
         stem = in_file.stem
@@ -307,13 +325,13 @@ class MainWindow(QMainWindow):
         if fmt == "jpeg":
             fmt = "jpg"
 
-        preferred = output_dir / f"{stem}_x{scale}.{fmt}"
+        preferred = dest_dir / f"{stem}_x{scale}.{fmt}"
         if preferred.is_file():
             return preferred
 
         # Fallback to check other common image formats at requested scale
         for ext in (".jpg", ".jpeg", ".png", ".webp"):
-            candidate = output_dir / f"{stem}_x{scale}{ext}"
+            candidate = dest_dir / f"{stem}_x{scale}{ext}"
             if candidate.is_file():
                 return candidate
 
@@ -368,6 +386,9 @@ class MainWindow(QMainWindow):
 
     def _on_generate_preview(self, file_path: str):
         config = self.control_panel.get_config()
+        item_dest = self.queue_table.get_file_destination(file_path)
+        if item_dest:
+            config.output_dir = item_dest
         self.log_viewer.append_log(
             f"Generating preview & saving real output to {config.output_dir} for {Path(file_path).name}...",
             "INFO",

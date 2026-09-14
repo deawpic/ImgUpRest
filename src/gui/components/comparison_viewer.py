@@ -51,8 +51,8 @@ class SplitWipeCanvas(QWidget):
         self._pix_after = None
         self.reset_view()
 
-    def set_after_image(self, path: Path):
-        self._pix_after = QPixmap(str(path)) if Path(path).exists() else None
+    def set_after_image(self, path: Path | None):
+        self._pix_after = QPixmap(str(path)) if path and Path(path).exists() else None
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):

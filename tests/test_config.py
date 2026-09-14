@@ -22,6 +22,17 @@ def test_default_config():
     assert config.mask_mouth is False
 
 
+def test_config_to_dict():
+    config = UpscaleConfig(scale=4, model="x4plus", output_dir=Path("/tmp/out"))
+    d = config.to_dict()
+    assert isinstance(d, dict)
+    assert d["scale"] == 4
+    assert d["model"] == "x4plus"
+    assert d["output_dir"] == "/tmp/out"
+    assert "face_model" in d
+
+
+
 def test_validation_valid():
     config = UpscaleConfig(
         scale=4,
@@ -103,3 +114,29 @@ def test_resolve_files(tmp_path: Path):
     assert img1 in files
     assert img2 in files
     assert txt not in files
+
+
+def test_resolve_files_recursive_subfolders(tmp_path: Path):
+    sub1 = tmp_path / "sub1"
+    sub2 = tmp_path / "sub1" / "nested"
+    sub1.mkdir()
+    sub2.mkdir()
+
+    img1 = tmp_path / "root.jpg"
+    img2 = sub1 / "level1.png"
+    img3 = sub2 / "level2.webp"
+    doc = sub2 / "info.pdf"
+
+    img1.write_text("1")
+    img2.write_text("2")
+    img3.write_text("3")
+    doc.write_text("doc")
+
+    config = UpscaleConfig(input_path=tmp_path)
+    files = config.resolve_files()
+
+    assert len(files) == 3
+    assert img1 in files
+    assert img2 in files
+    assert img3 in files
+    assert doc not in files

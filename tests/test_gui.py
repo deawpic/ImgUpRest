@@ -16,11 +16,30 @@ def qapp():
     return app
 
 
+@pytest.fixture(autouse=True)
+def isolate_session(tmp_path, monkeypatch):
+    dummy_session = tmp_path / "test_isolated_session.json"
+    monkeypatch.setattr("src.core.session.get_auto_session_path", lambda: dummy_session)
+    monkeypatch.setattr("src.gui.main_window.auto_load_session", lambda: None)
+
+
+
 def test_batch_queue_table(qapp, tmp_path: Path):
-    from src.gui.components.drop_zone import BatchQueueTable
+    from src.gui.components.drop_zone import (
+        COL_DEST,
+        COL_NAME,
+        COL_NUM,
+        COL_RES,
+        COL_STATUS,
+        BatchQueueTable,
+    )
 
     table = BatchQueueTable()
     assert table.table.alternatingRowColors() is False
+    assert (COL_NUM, COL_NAME, COL_RES, COL_DEST, COL_STATUS) == (0, 1, 2, 3, 4)
+    assert table.table.columnCount() == 5
+    headers = [table.table.horizontalHeaderItem(i).text() for i in range(5)]
+    assert headers == ["#", "Name", "Resolution", "Destination", "Status"]
 
     # Create dummy images
     img1 = tmp_path / "img1.jpg"
@@ -32,10 +51,17 @@ def test_batch_queue_table(qapp, tmp_path: Path):
     assert len(table.get_files()) == 2
     assert table.table.rowCount() == 2
 
-    # Test status update
+    # Test custom destination
+    custom_dest = tmp_path / "my_custom_folder"
+    table.set_file_destination(str(img1), str(custom_dest))
+    assert table.get_file_destination(str(img1)) == str(custom_dest.resolve())
+    assert table.table.item(0, COL_DEST).text() == "my_custom_folder"
+
+    # Test status update preserves destination
     table.set_file_status(str(img1), "Done")
-    item_status = table.table.item(0, 3)
+    item_status = table.table.item(0, COL_STATUS)
     assert item_status.text() == "Done"
+    assert table.get_file_destination(str(img1)) == str(custom_dest.resolve())
 
     # Test clear
     table.clear_all()
@@ -211,12 +237,15 @@ def test_main_window_auto_detects_existing_output(qapp, tmp_path):
     assert "Output exists" in win.comparison_viewer.lbl_status.text()
     assert win.comparison_viewer.canvas._pix_after is not None
     # Table status should be marked Done
-    assert win.queue_table.table.item(0, 3).text() == "Done"
+    from src.gui.components.drop_zone import COL_STATUS
+
+    assert win.queue_table.table.item(0, COL_STATUS).text() == "Done"
 
 
 def test_main_window_preview_done_marks_done(qapp, tmp_path):
     from PIL import Image
 
+    from src.gui.components.drop_zone import COL_STATUS
     from src.gui.main_window import MainWindow
 
     in_img = tmp_path / "sample.png"
@@ -231,7 +260,7 @@ def test_main_window_preview_done_marks_done(qapp, tmp_path):
     # Simulate preview completed
     win._on_preview_done(str(in_img), str(out_img))
 
-    assert win.queue_table.table.item(0, 3).text() == "Done"
+    assert win.queue_table.table.item(0, COL_STATUS).text() == "Done"
     assert win.comparison_viewer.btn_preview.text() == "🔄 Re-generate Preview"
     assert "sample_x4.jpg" in win.comparison_viewer.lbl_status.text()
 
@@ -239,7 +268,7 @@ def test_main_window_preview_done_marks_done(qapp, tmp_path):
 def test_batch_queue_table_session_save_load_and_smart_resume(qapp, tmp_path: Path):
     from PIL import Image
 
-    from src.gui.components.drop_zone import BatchQueueTable
+    from src.gui.components.drop_zone import COL_STATUS, BatchQueueTable
 
     table = BatchQueueTable()
 
@@ -267,7 +296,7 @@ def test_batch_queue_table_session_save_load_and_smart_resume(qapp, tmp_path: Pa
 
     # Test retry failed
     table.retry_failed()
-    assert table.table.item(1, 3).text() == "Queued"
+    assert table.table.item(1, COL_STATUS).text() == "Queued"
     assert table.get_pending_count() == 2
 
     # Save session to file
@@ -281,7 +310,7 @@ def test_batch_queue_table_session_save_load_and_smart_resume(qapp, tmp_path: Pa
     loaded_cfg = table.load_session_from_file(session_file)
     assert loaded_cfg.get("scale") == 4
     assert len(table.get_files()) == 3
-    assert table.table.item(0, 3).text() == "Done"
+    assert table.table.item(0, COL_STATUS).text() == "Done"
 
     # Test clear completed
     table.clear_completed()
@@ -326,6 +355,195 @@ def test_main_window_smart_resume_skips_done(qapp, tmp_path: Path, mocker):
     assert len(captured_config) == 1
     # Only pending img2 should be submitted
     assert captured_config[0].input_files == [img2]
+
+
+def test_batch_queue_table_multi_session_append_and_fallback(
+    qapp, tmp_path: Path
+):
+    from PIL import Image
+
+    from src.core.session import QueueItemData, QueueSession, save_session
+    from src.gui.components.drop_zone import BatchQueueTable
+
+    # Create dummy images
+    img1 = tmp_path / "f1.png"
+    img2 = tmp_path / "f2.png"
+    img3 = tmp_path / "f3.png"
+    img4 = tmp_path / "f4.png"
+    for img in (img1, img2, img3, img4):
+        Image.new("RGB", (20, 20)).save(img)
+
+    valid_dest = tmp_path / "valid_dest"
+    valid_dest.mkdir()
+    fallback_dest = tmp_path / "fallback_default"
+    fallback_dest.mkdir()
+
+    # Session 1: f1 with valid custom destination, f2 with None
+    s1_path = tmp_path / "session1.json"
+    sess1 = QueueSession(
+        config={"output_dir": str(valid_dest)},
+        items=[
+            QueueItemData(file_path=str(img1), destination_dir=str(valid_dest)),
+            QueueItemData(file_path=str(img2)),
+        ],
+    )
+    save_session(sess1, s1_path)
+
+    # Session 2: f3 with non-existent foreign destination, f4 with None
+    s2_path = tmp_path / "session2.json"
+    sess2 = QueueSession(
+        config={"output_dir": "/nonexistent/drive_d/output"},
+        items=[
+            QueueItemData(
+                file_path=str(img3),
+                destination_dir="/nonexistent/drive_d/output",
+            ),
+            QueueItemData(file_path=str(img4)),
+        ],
+    )
+    save_session(sess2, s2_path)
+
+    table = BatchQueueTable()
+    table.set_default_destination(str(fallback_dest))
+
+    # Load session 1 (append=False)
+    table.load_session_from_file(s1_path, append=False)
+    assert len(table.get_files()) == 2
+    assert table.get_file_destination(str(img1.resolve())) == str(valid_dest.resolve())
+
+    # Load session 2 (append=True) -> merging queues
+    table.load_session_from_file(s2_path, append=True)
+    assert len(table.get_files()) == 4
+    # img3 destination non-existent -> gracefully fallback to fallback_dest
+    assert table.get_file_destination(str(img3.resolve())) == str(fallback_dest)
+
+
+def test_drop_zone_recursive_add_folder(qapp, tmp_path: Path, mocker):
+    from PIL import Image
+
+    from src.gui.components.drop_zone import BatchQueueTable
+
+    root = tmp_path / "scan_test"
+    sub1 = root / "sub1"
+    sub2 = root / "sub1" / "nested"
+    sub1.mkdir(parents=True)
+    sub2.mkdir(parents=True)
+
+    f1 = root / "top.png"
+    f2 = sub1 / "mid.jpg"
+    f3 = sub2 / "deep.webp"
+    for f in (f1, f2, f3):
+        Image.new("RGB", (16, 16)).save(f)
+
+    table = BatchQueueTable()
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getExistingDirectory",
+        return_value=str(root),
+    )
+    table._on_add_folder()
+
+    files = table.get_files()
+    assert len(files) == 3
+    assert f1.resolve() in files
+    assert f2.resolve() in files
+    assert f3.resolve() in files
+
+
+def test_batch_queue_table_bulk_destination_change(qapp, tmp_path: Path, mocker):
+    from PIL import Image
+
+    from src.gui.components.drop_zone import COL_DEST, BatchQueueTable
+
+    # Create 3 images
+    img1 = tmp_path / "img1.png"
+    img2 = tmp_path / "img2.png"
+    img3 = tmp_path / "img3.png"
+    for img in (img1, img2, img3):
+        Image.new("RGB", (10, 10)).save(img)
+
+    table = BatchQueueTable()
+    table.add_paths([img1, img2, img3])
+    assert len(table.get_files()) == 3
+
+    # 1. Test set_files_destination programmatic API
+    dest_a = tmp_path / "dest_a"
+    dest_a.mkdir()
+    table.set_files_destination([img1, img2], str(dest_a))
+    assert table.get_file_destination(str(img1.resolve())) == str(dest_a.resolve())
+    assert table.get_file_destination(str(img2.resolve())) == str(dest_a.resolve())
+    assert table.table.item(0, COL_DEST).text() == "dest_a"
+    assert table.table.item(1, COL_DEST).text() == "dest_a"
+
+    # 2. Test selecting multiple rows and using btn_set_dest
+    from PySide6.QtWidgets import QTableWidgetSelectionRange
+
+    dest_b = tmp_path / "dest_b"
+    dest_b.mkdir()
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getExistingDirectory",
+        return_value=str(dest_b),
+    )
+
+    # Select rows 1 and 2
+    table.table.setRangeSelected(QTableWidgetSelectionRange(1, 0, 2, 4), True)
+    assert len(table.table.selectionModel().selectedRows()) == 2
+
+    table.btn_set_dest.click()
+    assert table.get_file_destination(str(img2.resolve())) == str(dest_b.resolve())
+    assert table.get_file_destination(str(img3.resolve())) == str(dest_b.resolve())
+    assert table.table.item(1, COL_DEST).text() == "dest_b"
+    assert table.table.item(2, COL_DEST).text() == "dest_b"
+
+    # 3. Test double-clicking COL_DEST with multiple selection
+    dest_c = tmp_path / "dest_c"
+    dest_c.mkdir()
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getExistingDirectory",
+        return_value=str(dest_c),
+    )
+    # Select all rows
+    table.table.selectAll()
+    assert len(table.table.selectionModel().selectedRows()) == 3
+    table._on_cell_double_clicked(0, COL_DEST)
+    for img in (img1, img2, img3):
+        assert table.get_file_destination(str(img.resolve())) == str(dest_c.resolve())
+
+
+def test_batch_queue_table_save_appends_json_and_config_provider(
+    qapp, tmp_path: Path, mocker
+):
+    from PIL import Image
+
+    from src.core.config import UpscaleConfig
+    from src.gui.components.drop_zone import BatchQueueTable
+
+    img = tmp_path / "pic.png"
+    Image.new("RGB", (10, 10)).save(img)
+
+    table = BatchQueueTable()
+    table.add_paths([img])
+    config = UpscaleConfig(scale=4, model="x4plus")
+    table.config_provider = lambda: config.to_dict()
+
+    save_target = tmp_path / "my_custom_queue"  # intentionally omitting .json extension
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getSaveFileName",
+        return_value=(str(save_target), "JSON Queue Files (*.json)"),
+    )
+
+    saved_paths = []
+    table.session_saved.connect(saved_paths.append)
+
+    table._on_save_queue()
+
+    assert len(saved_paths) == 1
+    assert saved_paths[0].endswith(".json")
+    saved_file = Path(saved_paths[0])
+    assert saved_file.is_file()
+    assert saved_file.name == "my_custom_queue.json"
+
+
+
 
 
 

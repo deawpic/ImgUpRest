@@ -39,8 +39,10 @@
 
 ### 🖥️ Desktop GUI Application (PySide6 / Qt6)
 - **🎯 1-Click Photography Presets**: ปรับแต่งค่าอัตโนมัติตามประเภทภาพในคลิกเดียว (Portrait & Studio, Old Film Scan, Landscape, Anime, Low-Light)
-- **Drag & Drop Batch Queue**: ลากวางไฟล์รูปภาพหลายไฟล์พร้อมกัน หรือลากทั้งโฟลเดอร์ลงบนหน้าต่างแอปได้ทันที ตารางแสดงรายการอ่านง่าย
-- **💾 Save & Load Queue Session (.json)**: บันทึกและโหลดคิวงานเก็บไว้ทำต่อวันหลัง หรือส่งไปรันต่อเครื่องอื่น พร้อมปุ่ม `💾 Save` และ `📂 Load` บนแถบควบคุม
+- **Drag & Drop & Recursive Batch Queue**: ลากวางไฟล์รูปภาพ หรือกดปุ่ม `📂 Add Folder` เพื่อสแกนค้นหารูปภาพในทุกโฟลเดอร์ย่อยอย่างลึกซึ้ง (`rglob("*")`) พร้อมระบบตรวจจับและป้องกันไฟล์ชื่อซ้ำเขียนทับกันอัตโนมัติ (Collision Protection: `photo_x4.png`, `photo_1_x4.png`)
+- **🎯 5-Column Queue & Bulk Destination**: ตารางคิวงานแสดง 5 คอลัมน์ (`#`, `Name`, `Resolution`, `Destination`, `Status`) รองรับการเลือกหลายไฟล์แล้วคลิกขวาเปลี่ยนโฟลเดอร์ปลายทางพร้อมกัน, กดปุ่ม `📁 Destination` บน Toolbar, หรือดับเบิ้ลคลิกช่อง Destination ได้อย่างอิสระ
+- **💾 Save & Multi-Queue Session Load (.json)**: บันทึกและโหลดคิวงานเก็บไว้ทำต่อ พร้อมรองรับการเลือกโหลดหลายไฟล์ `.json` พร้อมกันในครั้งเดียว (Multi-File Selection) พร้อมตัวเลือก Append เข้ากับคิวเดิม หรือ Replace คิวใหม่
+- **🛡️ Destination Fallback Across PCs**: เมื่อนำไฟล์ Session ไปเปิดบนเครื่องอื่นหรือไดรฟ์ที่ไม่มีอยู่จริง ระบบจะสลับมาใช้ Output Directory ปัจจุบันของโปรแกรมอัตโนมัติ ปลอดภัย ไม่เกิดข้อผิดพลาด
 - **🔄 Auto-Save & Crash Recovery**: จดจำรายการคิวและสถานะล่าสุด (`Done`, `Queued`, `Failed`) อัตโนมัติเมื่อปิดหรือเปิดโปรแกรมใหม่
 - **⏩ Smart Resume & Context Menu**: เมื่อกด Start Batch ระบบจะประมวลผลต่อเฉพาะไฟล์ที่ยังไม่เสร็จ และข้ามไฟล์ที่เสร็จแล้วอัตโนมัติ พร้อมเมนูคลิกขวา: `🔄 Retry Failed Items`, `🧹 Clear Completed`, `↺ Reset All to Queued`
 - **🔍 Interactive Zoom & Pan Before/After Wiper**: ตัวเลื่อนเปรียบเทียบภาพแบบ Split-View Slider พร้อมระบบซูมด้วยล้อเมาส์ (1.0x – 8.0x), คลิกขวา/เมาส์กลางลากเพื่อ Pan, และดับเบิ้ลคลิกเพื่อรีเซ็ต

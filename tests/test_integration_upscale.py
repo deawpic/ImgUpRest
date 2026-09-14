@@ -65,3 +65,66 @@ def test_batch_upscale_and_cancellation(tmp_path: Path):
     # At least one was completed before cancellation took effect
     assert result.completed >= 1
     assert result.cancelled is True
+
+
+def test_batch_upscale_subfolders_and_collision_prevention(tmp_path: Path):
+    """Verifies recursive subfolders, collision detection, and per-item destination routing."""
+    sub_a = tmp_path / "sub_a"
+    sub_b = tmp_path / "sub_b"
+    sub_a.mkdir()
+    sub_b.mkdir()
+
+    img_a = sub_a / "photo.png"
+    img_b = sub_b / "photo.png"
+    Image.new("RGB", (16, 16), color=(255, 0, 0)).save(img_a)
+    Image.new("RGB", (16, 16), color=(0, 255, 0)).save(img_b)
+
+    custom_out = tmp_path / "custom_outputs"
+    default_out = tmp_path / "default_outputs"
+
+    config = UpscaleConfig(
+        input_files=[img_a, img_b],
+        output_dir=default_out,
+        file_destinations={
+            str(img_b): str(custom_out),
+        },
+        scale=2,
+        model="animevideov3",
+        cpu_workers=2,
+        enable_gpu=False,
+    )
+
+    engine = UpscaleEngine()
+    result = engine.run(config)
+
+    assert result.total == 2
+    assert result.completed == 2
+    assert result.failed == 0
+
+    # img_a went to default_out: photo_x2.jpg
+    expected_a = default_out / "photo_x2.jpg"
+    assert expected_a.exists()
+
+    # img_b went to custom_out: photo_x2.jpg
+    expected_b = custom_out / "photo_x2.jpg"
+    assert expected_b.exists()
+
+    # Now test collision in the same output directory:
+    img_c = tmp_path / "photo.png"
+    Image.new("RGB", (16, 16), color=(0, 0, 255)).save(img_c)
+
+    config_collision = UpscaleConfig(
+        input_files=[img_a, img_c],  # both named photo.png
+        output_dir=default_out,
+        scale=2,
+        model="animevideov3",
+        cpu_workers=2,
+        enable_gpu=False,
+    )
+    result_collision = engine.run(config_collision)
+    assert result_collision.completed == 2
+    # One will be photo_x2.jpg, the other will be photo_1_x2.jpg
+    file_1 = default_out / "photo_x2.jpg"
+    file_2 = default_out / "photo_1_x2.jpg"
+    assert file_1.exists()
+    assert file_2.exists()

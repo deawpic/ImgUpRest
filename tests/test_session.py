@@ -95,3 +95,57 @@ def test_get_auto_session_path():
     path = get_auto_session_path()
     assert isinstance(path, Path)
     assert path.name == "last_session.json"
+
+
+def test_session_destination_dir_roundtrip(tmp_path: Path):
+    target_file = tmp_path / "dest_session.json"
+    item1 = QueueItemData(
+        file_path="/tmp/pic1.png",
+        status="Queued",
+        destination_dir="/tmp/custom_out",
+    )
+    item2 = QueueItemData(
+        file_path="/tmp/pic2.png",
+        status="Done",
+        destination_dir=None,
+    )
+    session = QueueSession(
+        config={"output_dir": "/tmp/default_out"},
+        items=[item1, item2],
+    )
+    save_session(session, target_file)
+
+    loaded = load_session(target_file)
+    assert len(loaded.items) == 2
+    assert loaded.items[0].destination_dir == "/tmp/custom_out"
+    # When None, from_dict falls back to config["output_dir"]
+    assert loaded.items[1].destination_dir == "/tmp/default_out"
+
+
+def test_session_backward_compatibility_fallback():
+    # Legacy session payload without destination_dir
+    legacy_dict = {
+        "version": "1.0",
+        "saved_at": "2026-09-01T00:00:00",
+        "config": {"output_dir": "/home/user/Upscaled"},
+        "items": [
+            {"file_path": "/home/user/photo.jpg", "status": "Queued"},
+        ],
+    }
+    session = QueueSession.from_dict(legacy_dict)
+    assert len(session.items) == 1
+    assert session.items[0].destination_dir == "/home/user/Upscaled"
+
+
+def test_save_session_auto_appends_json_extension(tmp_path: Path):
+    target = tmp_path / "custom_queue_no_ext"
+    session = QueueSession(config={"scale": 4})
+    saved = save_session(session, target)
+    assert saved.suffix == ".json"
+    assert (tmp_path / "custom_queue_no_ext.json").is_file()
+
+    # And loading without .json finds it
+    loaded = load_session(target)
+    assert loaded.config["scale"] == 4
+
+

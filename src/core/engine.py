@@ -187,8 +187,30 @@ class UpscaleEngine:
         task_queue = Queue()
         progress_queue = Queue()
 
+        fmt = config.output_format.lower().lstrip(".")
+        if fmt == "jpeg":
+            fmt = "jpg"
+
+        used_output_paths: set[Path] = set()
+
         for img in images:
-            task_queue.put(img)
+            dest_dir_str = (
+                config.file_destinations.get(str(img))
+                if config.file_destinations
+                else None
+            )
+            dest_dir = Path(dest_dir_str).resolve() if dest_dir_str else output_path
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            stem = img.stem
+            candidate = dest_dir / f"{stem}_x{config.scale}.{fmt}"
+            counter = 1
+            while candidate in used_output_paths:
+                candidate = dest_dir / f"{stem}_{counter}_x{config.scale}.{fmt}"
+                counter += 1
+            used_output_paths.add(candidate)
+
+            task_queue.put((img, dest_dir, candidate))
 
         # Send termination signals for all workers
         for _ in range(total_workers):

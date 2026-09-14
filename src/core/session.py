@@ -132,3 +132,15 @@ def auto_load_session() -> QueueSession | None:
     except Exception as exc:
         logger.warning(f"Failed to auto-load previous session: {exc}")
     return None
+
+
+def clear_auto_session() -> None:
+    """Removes the automatic session recovery file if it exists."""
+    try:
+        path = get_auto_session_path()
+        if path.is_file():
+            path.unlink(missing_ok=True)
+            logger.info(f"Cleared auto-saved session file: {path}")
+    except Exception as exc:
+        logger.warning(f"Failed to clear auto session: {exc}")
+

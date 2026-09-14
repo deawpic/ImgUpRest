@@ -543,6 +543,54 @@ def test_batch_queue_table_save_appends_json_and_config_provider(
     assert saved_file.name == "my_custom_queue.json"
 
 
+def test_clear_queue_removes_auto_session(qapp, tmp_path, monkeypatch):
+    from PySide6.QtGui import QCloseEvent
+
+    from src.core.session import QueueItemData, QueueSession, auto_save_session
+    from src.gui.main_window import MainWindow
+
+    auto_file = tmp_path / "last_session.json"
+    monkeypatch.setattr("src.core.session.get_auto_session_path", lambda: auto_file)
+    import src.core.session
+    monkeypatch.setattr("src.gui.main_window.auto_load_session", src.core.session.auto_load_session)
+
+    # 1. Simulate an existing auto-session file
+    dummy_img = tmp_path / "img1.png"
+    dummy_img.write_text("x")
+    auto_save_session(
+        QueueSession(
+            config={"scale": 4},
+            items=[
+                QueueItemData(
+                    file_path=str(dummy_img), status="Queued"
+                )
+            ],
+        )
+    )
+    assert auto_file.is_file()
+
+    # 2. Open MainWindow (which restores the session)
+    win = MainWindow()
+    assert len(win.queue_table.get_files()) == 1
+
+    # 3. User clicks Clear All
+    win.queue_table.clear_all()
+    assert len(win.queue_table.get_files()) == 0
+    # The file should be removed immediately
+    assert not auto_file.is_file()
+
+    # 4. User closes the app with empty queue
+    evt = QCloseEvent()
+    win.closeEvent(evt)
+    assert evt.isAccepted()
+    assert not auto_file.is_file()
+
+    # 5. Reopening MainWindow must NOT restore the cleared session
+    win2 = MainWindow()
+    assert len(win2.queue_table.get_files()) == 0
+
+
+
 
 
 

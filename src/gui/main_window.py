@@ -19,6 +19,7 @@ from src.core.session import (
     QueueSession,
     auto_load_session,
     auto_save_session,
+    clear_auto_session,
 )
 from src.gui.components.comparison_viewer import ComparisonViewer
 from src.gui.components.control_panel import ControlPanel
@@ -443,6 +444,8 @@ class MainWindow(QMainWindow):
                     items=items,
                 )
                 auto_save_session(session)
+            else:
+                clear_auto_session()
         except Exception:
             pass
 

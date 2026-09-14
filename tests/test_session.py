@@ -7,6 +7,7 @@ from src.core.session import (
     QueueSession,
     auto_load_session,
     auto_save_session,
+    clear_auto_session,
     get_auto_session_path,
     load_session,
     save_session,
@@ -89,6 +90,15 @@ def test_auto_save_and_auto_load_lifecycle(tmp_path: Path, monkeypatch):
     # Corrupt file should safely return None without crashing
     auto_file.write_text("{corrupted-json")
     assert auto_load_session() is None
+
+    # clear_auto_session should delete the file safely
+    auto_file.write_text("{}")
+    assert auto_file.is_file()
+    clear_auto_session()
+    assert not auto_file.is_file()
+    # Calling clear again when file does not exist should not raise error
+    clear_auto_session()
+
 
 
 def test_get_auto_session_path():

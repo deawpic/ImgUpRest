@@ -21,6 +21,7 @@ from src.core.models import SUPPORTED_EXTS
 from src.core.session import (
     QueueItemData,
     QueueSession,
+    clear_auto_session,
     load_session,
     save_session,
 )
@@ -204,12 +205,16 @@ class BatchQueueTable(QWidget):
             self.table.item(r, COL_NUM).setText(str(r + 1))
 
         self._update_label()
+        if not self._files:
+            clear_auto_session()
 
-    def clear_all(self):
+    def clear_all(self, clear_saved_session: bool = True):
         self._files.clear()
         self._item_data.clear()
         self.table.setRowCount(0)
         self._update_label()
+        if clear_saved_session:
+            clear_auto_session()
 
     def set_default_destination(self, path: str):
         self._default_destination = str(path)
@@ -581,7 +586,7 @@ class BatchQueueTable(QWidget):
         self, items: list[QueueItemData], append: bool = False
     ) -> None:
         if not append:
-            self.clear_all()
+            self.clear_all(clear_saved_session=False)
         colors = STATUS_COLORS["dark" if self._is_dark else "light"]
 
         for item in items:
@@ -707,6 +712,8 @@ class BatchQueueTable(QWidget):
         for r in range(self.table.rowCount()):
             self.table.item(r, COL_NUM).setText(str(r + 1))
         self._update_label()
+        if not self._files:
+            clear_auto_session()
 
     def reset_all_to_queued(self) -> None:
         colors = STATUS_COLORS["dark" if self._is_dark else "light"]

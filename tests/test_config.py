@@ -28,7 +28,7 @@ def test_config_to_dict():
     assert isinstance(d, dict)
     assert d["scale"] == 4
     assert d["model"] == "x4plus"
-    assert d["output_dir"] == "/tmp/out"
+    assert Path(d["output_dir"]) == Path("/tmp/out")
     assert "face_model" in d
 
 

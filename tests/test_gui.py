@@ -113,6 +113,17 @@ def test_control_panel_config(qapp):
     assert updated_cfg.denoise_strength == 40
     assert abs(updated_cfg.face_fidelity - 0.85) < 1e-4
 
+    # Test hardware toggle and worker setting
+    assert portrait_cfg.cpu_workers == 0
+    panel.chk_gpu.setChecked(False)
+    assert panel.spin_cpu_workers.value() >= 1
+    assert panel.get_config().enable_gpu is False
+    assert panel.get_config().cpu_workers >= 1
+
+    panel.chk_gpu.setChecked(True)
+    panel.cmb_preset.setCurrentIndex(idx_portrait)
+    assert panel.spin_cpu_workers.value() == 0
+
 
 def test_comparison_viewer_split_and_zoom(qapp):
     from PySide6.QtCore import QPoint

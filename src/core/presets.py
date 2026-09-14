@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from src.core.config import get_default_cpu_workers
+
 if TYPE_CHECKING:
     from src.core.config import UpscaleConfig
 
@@ -22,6 +24,7 @@ class Preset:
     face_model: str
     face_fidelity: float
     mask_mouth: bool = False
+    cpu_workers: int = 0  # Recommended CPU workers when GPU acceleration is active
 
     def apply_to_config(self, config: UpscaleConfig) -> None:
         """Applies this preset parameters to an existing UpscaleConfig instance."""
@@ -33,13 +36,17 @@ class Preset:
         config.face_model = self.face_model
         config.face_fidelity = self.face_fidelity
         config.mask_mouth = self.mask_mouth
+        if config.enable_gpu:
+            config.cpu_workers = self.cpu_workers
+        else:
+            config.cpu_workers = max(1, min(3, get_default_cpu_workers()))
 
 
 PRESETS: dict[str, Preset] = {
     "portrait": Preset(
         key="portrait",
         name="📸 Portrait & Studio (ภาพบุคคล & สตูดิโอ)",
-        description="GFPGAN v1.4 (0.80) + Denoise 0% + Grain 2% + Real Smile (Natural eyes, skin & real teeth)",
+        description="GFPGAN v1.4 (0.80) + Grain 2% + Real Smile | ⚡ GPU 1 + CPU 0 (Max speed)",
         model="x4plus",
         scale=4,
         denoise_strength=0,
@@ -48,11 +55,12 @@ PRESETS: dict[str, Preset] = {
         face_model="gfpgan",
         face_fidelity=0.80,
         mask_mouth=True,
+        cpu_workers=0,
     ),
     "vintage_film": Preset(
         key="vintage_film",
         name="🎞️ Old / Scanned Film (ภาพเก่า & สแกนฟิล์ม)",
-        description="GFPGAN v1.4 (0.75) + Denoise 20% + Grain 5% (Authentic 35mm grain)",
+        description="GFPGAN v1.4 (0.75) + Denoise 20% + Grain 5% | ⚡ GPU 1 + CPU 0 (Authentic 35mm)",
         model="x4plus",
         scale=4,
         denoise_strength=20,
@@ -61,11 +69,12 @@ PRESETS: dict[str, Preset] = {
         face_model="gfpgan",
         face_fidelity=0.75,
         mask_mouth=False,
+        cpu_workers=0,
     ),
     "landscape": Preset(
         key="landscape",
         name="🏔️ Landscape & Nature (วิว & สถาปัตยกรรม)",
-        description="x4plus + Denoise 0% + Face OFF (Max foliage & stone sharpness)",
+        description="x4plus + Denoise 0% + Face OFF | ⚡ GPU 1 + CPU 0 (Max foliage sharpness)",
         model="x4plus",
         scale=4,
         denoise_strength=0,
@@ -73,11 +82,12 @@ PRESETS: dict[str, Preset] = {
         enable_face_enhance=False,
         face_model="gfpgan",
         face_fidelity=0.80,
+        cpu_workers=0,
     ),
     "anime": Preset(
         key="anime",
         name="🎨 Anime & Digital Art (ภาพการ์ตูน & อาร์ต)",
-        description="x4plus-anime + Denoise 40% + Face OFF (Crisp clean lines)",
+        description="x4plus-anime + Denoise 40% + Face OFF | ⚡ GPU 1 + CPU 0 (Crisp clean lines)",
         model="x4plus-anime",
         scale=4,
         denoise_strength=40,
@@ -85,11 +95,12 @@ PRESETS: dict[str, Preset] = {
         enable_face_enhance=False,
         face_model="gfpgan",
         face_fidelity=0.80,
+        cpu_workers=0,
     ),
     "low_light": Preset(
         key="low_light",
         name="🌃 Low-Light / High-ISO (ภาพกลางคืน & น้อยส์สูง)",
-        description="GFPGAN v1.4 (0.70) + Denoise 30% + Grain 2% (Removes chroma noise)",
+        description="GFPGAN v1.4 (0.70) + Denoise 30% + Grain 2% | ⚡ GPU 1 + CPU 0 (Removes chroma noise)",
         model="x4plus",
         scale=4,
         denoise_strength=30,
@@ -97,5 +108,6 @@ PRESETS: dict[str, Preset] = {
         enable_face_enhance=True,
         face_model="gfpgan",
         face_fidelity=0.70,
+        cpu_workers=0,
     ),
 }

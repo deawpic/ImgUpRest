@@ -143,9 +143,16 @@ class ControlPanel(QWidget):
         max_cpus = os.cpu_count() or 6
         self.spin_cpu_workers = QSpinBox()
         self.spin_cpu_workers.setRange(0, max_cpus)
-        self.spin_cpu_workers.setValue(min(3, get_default_cpu_workers()))
+        self.spin_cpu_workers.setValue(0 if self.chk_gpu.isChecked() else max(1, min(3, get_default_cpu_workers())))
+        self.spin_cpu_workers.setToolTip(
+            "Recommended: 0 CPU Workers when GPU is enabled.\n"
+            "• 0 Workers: GPU handles upscaling; CPU is 100% free for Face Enhancement (GFPGAN) & UI.\n"
+            "• >=1 Workers: Additional CPU processes running Real-ESRGAN (can cause 100% CPU contention)."
+        )
         hw_box.addWidget(self.spin_cpu_workers)
-        hw_box.addWidget(QLabel(f"Workers (Available Cores: {max_cpus})"))
+        self.lbl_cpu_workers_desc = QLabel(f"Workers (0 = GPU Only, Available Cores: {max_cpus})")
+        self.lbl_cpu_workers_desc.setStyleSheet("color: #64748b; font-size: 12px;")
+        hw_box.addWidget(self.lbl_cpu_workers_desc)
 
         layout_hw.addRow("GPU Acceleration:", self.chk_gpu)
         layout_hw.addRow("CPU Workers:", hw_box)
@@ -263,6 +270,10 @@ class ControlPanel(QWidget):
         self.slider_quality.valueChanged.connect(self._on_quality_changed)
         self.cmb_format.currentIndexChanged.connect(self._on_format_changed)
         self.btn_browse_dir.clicked.connect(self._on_browse_output)
+        self.chk_gpu.toggled.connect(self._on_gpu_toggled)
+        self.spin_cpu_workers.valueChanged.connect(
+            lambda _: (self._mark_as_custom(), self.config_changed.emit())
+        )
 
     def _mark_as_custom(self):
         """Switches preset dropdown to 'Custom' if user modifies any setting."""
@@ -329,9 +340,28 @@ class ControlPanel(QWidget):
                 fid_val = int(preset.face_fidelity * 100)
                 self.slider_fidelity.setValue(fid_val)
                 self.lbl_fidelity_val.setText(f"{preset.face_fidelity:.2f}")
+
+                # Set recommended CPU workers
+                if self.chk_gpu.isChecked():
+                    self.spin_cpu_workers.setValue(preset.cpu_workers)
+                else:
+                    self.spin_cpu_workers.setValue(max(1, min(3, get_default_cpu_workers())))
             finally:
                 self._applying_preset = False
             self.config_changed.emit()
+
+    def _on_gpu_toggled(self, checked: bool):
+        if not checked:
+            self.spin_cpu_workers.setMinimum(1)
+            if self.spin_cpu_workers.value() == 0:
+                self.spin_cpu_workers.setValue(max(1, min(3, get_default_cpu_workers())))
+        else:
+            self.spin_cpu_workers.setMinimum(0)
+            key = self.cmb_preset.currentData()
+            if key in PRESETS:
+                self.spin_cpu_workers.setValue(PRESETS[key].cpu_workers)
+        self._mark_as_custom()
+        self.config_changed.emit()
 
     def _on_model_changed(self):
         key = self.cmb_model.currentData()

@@ -29,8 +29,15 @@ def test_apply_preset_to_config():
     assert cfg.face_model == "gfpgan"
     assert cfg.face_fidelity == 0.80
     assert cfg.mask_mouth is True
+    assert cfg.cpu_workers == 0
 
     cfg.validate()  # Should validate with 0 errors
+
+    # If GPU is disabled, preset must assign at least 1 CPU worker
+    cfg_cpu_only = UpscaleConfig(enable_gpu=False)
+    portrait.apply_to_config(cfg_cpu_only)
+    assert cfg_cpu_only.cpu_workers >= 1
+    cfg_cpu_only.validate()
 
 
 def test_anime_preset_to_config():
@@ -43,5 +50,6 @@ def test_anime_preset_to_config():
     assert cfg.grain_strength == 0
     assert cfg.enable_face_enhance is False
     assert cfg.mask_mouth is False
+    assert cfg.cpu_workers == 0
 
     cfg.validate()

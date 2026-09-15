@@ -27,6 +27,7 @@ class UpscaleEngine:
 
     def __init__(self):
         self._cancel_event = Event()
+        self._pause_event = Event()
         self._is_running = False
         self._current_processes: list[Process] = []
 
@@ -34,9 +35,22 @@ class UpscaleEngine:
     def is_running(self) -> bool:
         return self._is_running
 
+    @property
+    def is_paused(self) -> bool:
+        return self._pause_event.is_set()
+
+    def pause(self) -> None:
+        """Pauses processing cooperatively without terminating worker processes."""
+        self._pause_event.set()
+
+    def resume(self) -> None:
+        """Resumes paused worker processes."""
+        self._pause_event.clear()
+
     def cancel(self) -> None:
         """Signals all active workers to cancel processing cooperatively."""
         self._cancel_event.set()
+        self._pause_event.clear()  # Ensure paused workers wake up to handle cancel
 
     def process_single_image(
         self,
@@ -146,6 +160,7 @@ class UpscaleEngine:
             return res
 
         self._cancel_event.clear()
+        self._pause_event.clear()
         self._is_running = True
 
         # Pre-flight check: ensure face enhancement model is ready BEFORE launching workers
@@ -159,29 +174,20 @@ class UpscaleEngine:
                     log_callback=log,
                 )
                 log(f"Face model '{config.face_model}' verified and ready.", "INFO")
-            except Exception as exc:
-                err_msg = f"Cannot proceed with face enhancement: {exc}"
-                log(err_msg, "ERROR")
-                res = EngineResult(
-                    total=total_images,
-                    completed=0,
-                    failed=total_images,
-                    elapsed_seconds=0.0,
-                    output_dir=output_path,
-                    cancelled=True,
-                )
+            except Exception as e:
+                log(f"Cannot proceed with face enhancement: {e}", "ERROR")
+                res = EngineResult(total_images, 0, 0, 0.0, output_path, cancelled=True)
                 if on_finish:
                     on_finish(res)
                 return res
 
         num_cpu_workers = config.cpu_workers
-        num_gpu_workers = 1 if config.enable_gpu else 0
-        total_workers = num_gpu_workers + num_cpu_workers
+        total_workers = (1 if config.enable_gpu else 0) + num_cpu_workers
 
-        log(f"Found {total_images} images to upscale.")
         log(
-            f"Launching: {num_gpu_workers}x GPU Worker (ID: {config.gpuid}) + "
-            f"{num_cpu_workers}x CPU Workers. Model: {config.model}, Scale: {config.scale}x"
+            f"Starting upscale: {total_images} images | Scale: {config.scale}x | "
+            f"Workers: {'1 GPU + ' if config.enable_gpu else ''}{num_cpu_workers} CPU | "
+            f"Model: {config.model}"
         )
 
         task_queue = Queue()
@@ -240,6 +246,7 @@ class UpscaleEngine:
                     config.face_model,
                     config.face_fidelity,
                     config.mask_mouth,
+                    self._pause_event,
                 ),
             )
             p_gpu.start()
@@ -266,6 +273,7 @@ class UpscaleEngine:
                     config.face_model,
                     config.face_fidelity,
                     config.mask_mouth,
+                    self._pause_event,
                 ),
             )
             p_cpu.start()
@@ -277,9 +285,19 @@ class UpscaleEngine:
         failed = 0
         processed_count = 0
         start_time = time.time()
+        total_paused_duration = 0.0
+        pause_start: float | None = None
 
         try:
             while processed_count < total_images and not self._cancel_event.is_set():
+                if self._pause_event.is_set():
+                    if pause_start is None:
+                        pause_start = time.time()
+                else:
+                    if pause_start is not None:
+                        total_paused_duration += time.time() - pause_start
+                        pause_start = None
+
                 try:
                     msg = progress_queue.get(timeout=0.5)
                 except queue.Empty:
@@ -306,7 +324,7 @@ class UpscaleEngine:
                     on_item_complete(in_file, out_file, err)
 
                 now = time.time()
-                elapsed = max(0.001, now - start_time)
+                elapsed = max(0.001, now - start_time - total_paused_duration)
                 speed = processed_count / elapsed  # images/sec
                 remaining_items = total_images - processed_count
                 eta = remaining_items / speed if speed > 0 else 0.0

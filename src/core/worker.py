@@ -1,5 +1,6 @@
 import os
 import queue
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -26,6 +27,7 @@ def worker_process(
     face_model: str = "codeformer",
     face_fidelity: float = 0.8,
     mask_mouth: bool = False,
+    pause_event=None,
 ):
     """Worker process targeting either GPU (gpuid >= 0) or CPU (gpuid = -1)."""
     import cv2
@@ -78,6 +80,10 @@ def worker_process(
         fmt = "jpg"
 
     while not cancel_event.is_set():
+        if pause_event is not None and pause_event.is_set():
+            time.sleep(0.15)
+            continue
+
         try:
             item = task_queue.get(timeout=0.2)
         except queue.Empty:

@@ -5,6 +5,7 @@ Runs lightweight ONNX Runtime inference without requiring PyTorch.
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import platform
@@ -219,20 +220,35 @@ def download_weight_file(
     if temp_file.exists():
         temp_file.unlink(missing_ok=True)
 
-    print(f"\n[AI Model] Downloading {model_key} weights ({filename})...")
+    if sys.stdout is not None:
+        try:
+            print(f"\n[AI Model] Downloading {model_key} weights ({filename})...")
+        except Exception:
+            pass
     log(f"Downloading {model_key} weights ({filename}) from {url}...")
 
     try:
         from tqdm import tqdm
 
+        has_stream = sys.stderr is not None and hasattr(sys.stderr, "write")
+        out_stream = sys.stderr if has_stream else io.StringIO()
+        disable_pbar = not has_stream
+
         with tqdm(
-            unit="B", unit_scale=True, unit_divisor=1024, miniters=1, desc=filename
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+            miniters=1,
+            desc=filename,
+            file=out_stream,
+            disable=disable_pbar,
         ) as pbar:
             last_logged_pct = [-15]
 
             def reporthook(blocknum, blocksize, totalsize):
                 if totalsize > 0:
-                    pbar.total = totalsize
+                    if not disable_pbar:
+                        pbar.total = totalsize
                     pct = int((blocknum * blocksize / totalsize) * 100)
                     if pct >= last_logged_pct[0] + 15:
                         last_logged_pct[0] = pct
@@ -242,7 +258,8 @@ def download_weight_file(
                             f"Downloading {filename}: {mb_done:.1f} / {mb_tot:.1f} MB ({pct}%)",
                             "INFO",
                         )
-                pbar.update(blocksize)
+                if not disable_pbar:
+                    pbar.update(blocksize)
 
             urllib.request.urlretrieve(url, temp_file, reporthook=reporthook)
 
@@ -255,7 +272,11 @@ def download_weight_file(
 
         # Atomic rename once verified
         temp_file.replace(dest_file)
-        print(f"[AI Model] Successfully downloaded {filename} to {dest_file}\n")
+        if sys.stdout is not None:
+            try:
+                print(f"[AI Model] Successfully downloaded {filename} to {dest_file}\n")
+            except Exception:
+                pass
         log(
             f"Successfully downloaded {filename} ({actual_size / (1024 * 1024):.1f} MB)"
         )
@@ -263,7 +284,11 @@ def download_weight_file(
     except Exception as exc:
         if temp_file.exists():
             temp_file.unlink(missing_ok=True)
-        print(f"[Warning] Failed to download {filename}: {exc}")
+        if sys.stderr is not None:
+            try:
+                print(f"[Warning] Failed to download {filename}: {exc}")
+            except Exception:
+                pass
         log(f"Failed to download {filename}: {exc}", "ERROR")
         raise RuntimeError(
             f"Failed to download {model_key} weights ({filename}): {exc}"

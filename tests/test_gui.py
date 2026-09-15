@@ -446,7 +446,10 @@ def test_drop_zone_recursive_add_folder(qapp, tmp_path: Path, mocker):
     for f in (f1, f2, f3):
         Image.new("RGB", (16, 16)).save(f)
 
+    default_out = tmp_path / "output"
     table = BatchQueueTable()
+    table.prompt_on_add = False
+    table.set_default_destination(str(default_out))
     mocker.patch(
         "PySide6.QtWidgets.QFileDialog.getExistingDirectory",
         return_value=str(root),
@@ -458,6 +461,25 @@ def test_drop_zone_recursive_add_folder(qapp, tmp_path: Path, mocker):
     assert f1.resolve() in files
     assert f2.resolve() in files
     assert f3.resolve() in files
+
+    # Verify mirrored folder & subfolder destinations
+    expected_dest_f1 = (default_out / "scan_test").resolve()
+    expected_dest_f2 = (default_out / "scan_test" / "sub1").resolve()
+    expected_dest_f3 = (default_out / "scan_test" / "sub1" / "nested").resolve()
+
+    assert table.get_file_destination(str(f1.resolve())) == str(expected_dest_f1)
+    assert table.get_file_destination(str(f2.resolve())) == str(expected_dest_f2)
+    assert table.get_file_destination(str(f3.resolve())) == str(expected_dest_f3)
+
+    # Check table COL_DEST display labels
+    from src.gui.components.drop_zone import COL_DEST
+    row_f1 = files.index(f1.resolve())
+    row_f2 = files.index(f2.resolve())
+    row_f3 = files.index(f3.resolve())
+    assert table.table.item(row_f1, COL_DEST).text() == "scan_test"
+    assert table.table.item(row_f2, COL_DEST).text() == str(Path("scan_test") / "sub1")
+    assert table.table.item(row_f3, COL_DEST).text() == str(Path("scan_test") / "sub1" / "nested")
+
 
 
 def test_batch_queue_table_bulk_destination_change(qapp, tmp_path: Path, mocker):
@@ -599,6 +621,328 @@ def test_clear_queue_removes_auto_session(qapp, tmp_path, monkeypatch):
     # 5. Reopening MainWindow must NOT restore the cleared session
     win2 = MainWindow()
     assert len(win2.queue_table.get_files()) == 0
+
+
+def test_drop_zone_drag_drop_mix_folder_and_file(qapp, tmp_path: Path):
+    from PIL import Image
+    from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    from src.gui.components.drop_zone import COL_DEST, BatchQueueTable
+
+    # Create folder with subfolder
+    album = tmp_path / "Album1"
+    album_day1 = album / "day1"
+    album_day1.mkdir(parents=True)
+    f_album = album / "photo1.png"
+    f_sub = album_day1 / "photo2.png"
+
+    # Standalone file
+    f_single = tmp_path / "single.jpg"
+
+    for f in (f_album, f_sub, f_single):
+        Image.new("RGB", (16, 16)).save(f)
+
+    out_base = tmp_path / "my_output"
+    table = BatchQueueTable()
+    table.prompt_on_add = False
+    table.set_default_destination(str(out_base))
+
+    # Mock drop event with QMimeData
+    mime_data = QMimeData()
+    mime_data.setUrls([QUrl.fromLocalFile(str(album)), QUrl.fromLocalFile(str(f_single))])
+
+    event = QDropEvent(
+        QPointF(0, 0),
+        Qt.CopyAction,
+        mime_data,
+        Qt.LeftButton,
+        Qt.NoModifier,
+    )
+    table.dropEvent(event)
+
+    files = table.get_files()
+    assert len(files) == 3
+    assert f_album.resolve() in files
+    assert f_sub.resolve() in files
+    assert f_single.resolve() in files
+
+    # Verify single file uses default output
+    assert table.get_file_destination(str(f_single.resolve())) == str(out_base.resolve())
+
+    # Verify folder files mirror folder and subfolders
+    assert table.get_file_destination(str(f_album.resolve())) == str((out_base / "Album1").resolve())
+    assert table.get_file_destination(str(f_sub.resolve())) == str((out_base / "Album1" / "day1").resolve())
+
+    # Verify COL_DEST text
+    row_album = files.index(f_album.resolve())
+    row_sub = files.index(f_sub.resolve())
+    row_single = files.index(f_single.resolve())
+
+    assert table.table.item(row_album, COL_DEST).text() == "Album1"
+    assert table.table.item(row_sub, COL_DEST).text() == str(Path("Album1") / "day1")
+    assert table.table.item(row_single, COL_DEST).text() == "my_output"
+
+
+def test_destination_prompt_dialog_interactions(qapp, tmp_path: Path, mocker):
+    from PySide6.QtWidgets import QDialog
+
+    from src.gui.components.drop_zone import DestinationPromptDialog
+
+    default_dest = tmp_path / "default_out"
+    custom_dest = tmp_path / "custom_out"
+
+    # 1. Test confirm with custom path
+    dlg1 = DestinationPromptDialog(
+        default_destination=str(default_dest), count=5, has_folders=True, folder_names=["Album1"]
+    )
+    dlg1.txt_dest.setText(str(custom_dest))
+    dlg1.btn_confirm.click()
+    assert dlg1.result() == QDialog.Accepted
+    assert dlg1.chosen_destination == str(custom_dest)
+    assert dlg1.dont_ask_again is False
+
+    # 2. Test Use Default button
+    dlg2 = DestinationPromptDialog(
+        default_destination=str(default_dest), count=2, has_folders=False
+    )
+    dlg2.btn_default.click()
+    assert dlg2.result() == QDialog.Accepted
+    assert dlg2.chosen_destination == str(default_dest)
+
+    # 3. Test Cancel button
+    dlg3 = DestinationPromptDialog(
+        default_destination=str(default_dest), count=2
+    )
+    dlg3.btn_cancel.click()
+    assert dlg3.result() == QDialog.Rejected
+    assert dlg3.chosen_destination is None
+
+    # 4. Test "Don't ask again" checkbox
+    dlg4 = DestinationPromptDialog(
+        default_destination=str(default_dest), count=1
+    )
+    dlg4.chk_dont_ask.setChecked(True)
+    dlg4.btn_confirm.click()
+    assert dlg4.dont_ask_again is True
+
+
+def test_add_actions_destination_prompt_flow(qapp, tmp_path: Path, mocker):
+    from PIL import Image
+    from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    from src.gui.components.drop_zone import BatchQueueTable
+
+    # Create dummy images
+    f1 = tmp_path / "photo1.jpg"
+    f2 = tmp_path / "photo2.png"
+    Image.new("RGB", (10, 10)).save(f1)
+    Image.new("RGB", (10, 10)).save(f2)
+
+    folder = tmp_path / "Vacation"
+    folder.mkdir()
+    f3 = folder / "beach.jpg"
+    Image.new("RGB", (10, 10)).save(f3)
+
+    custom_dir = tmp_path / "my_custom_destination"
+
+    # 1. Add Files with custom destination confirmed
+    table = BatchQueueTable()
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getOpenFileNames",
+        return_value=([str(f1)], ""),
+    )
+    mocker.patch.object(
+        table, "_prompt_add_destination_dialog", return_value=str(custom_dir)
+    )
+    table._on_add_files()
+    assert len(table.get_files()) == 1
+    assert table.get_file_destination(str(f1.resolve())) == str(custom_dir.resolve())
+
+    # 2. Add Files with dialog cancelled (returns None) -> should NOT add
+    mocker.patch.object(
+        table, "_prompt_add_destination_dialog", return_value=None
+    )
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getOpenFileNames",
+        return_value=([str(f2)], ""),
+    )
+    table._on_add_files()
+    assert len(table.get_files()) == 1  # Still 1, f2 was not added
+
+    # 3. Add Folder with custom destination confirmed
+    mocker.patch(
+        "PySide6.QtWidgets.QFileDialog.getExistingDirectory",
+        return_value=str(folder),
+    )
+    mocker.patch.object(
+        table, "_prompt_add_destination_dialog", return_value=str(custom_dir)
+    )
+    table._on_add_folder()
+    assert len(table.get_files()) == 2
+    expected_beach_dest = str((custom_dir / "Vacation").resolve())
+    assert table.get_file_destination(str(f3.resolve())) == expected_beach_dest
+
+    # 4. Drag and Drop with dialog cancelled -> should NOT add
+    f4 = tmp_path / "dropped.png"
+    Image.new("RGB", (10, 10)).save(f4)
+    mime_data = QMimeData()
+    mime_data.setUrls([QUrl.fromLocalFile(str(f4))])
+    event = QDropEvent(QPointF(0, 0), Qt.CopyAction, mime_data, Qt.LeftButton, Qt.NoModifier)
+
+    mocker.patch.object(table, "_prompt_add_destination_dialog", return_value=None)
+    table.dropEvent(event)
+    assert len(table.get_files()) == 2  # Still 2, f4 was not added
+
+
+def test_progress_panel_pause_button(qapp):
+    from src.gui.components.progress_panel import ProgressPanel
+
+    panel = ProgressPanel()
+    assert not panel.btn_pause.isEnabled()
+
+    clicked = []
+    panel.pause_clicked.connect(lambda: clicked.append(True))
+
+    panel.set_running_state(True)
+    assert panel.btn_pause.isEnabled()
+    assert "Pause" in panel.btn_pause.text()
+
+    panel.btn_pause.click()
+    assert len(clicked) == 1
+
+    panel.set_paused_state(True)
+    assert "Resume" in panel.btn_pause.text()
+    assert "Paused" in panel.lbl_status.text()
+
+    panel.set_paused_state(False)
+    assert "Pause" in panel.btn_pause.text()
+
+    panel.set_finished_state(completed=5, total=5, cancelled=False)
+    assert not panel.btn_pause.isEnabled()
+    assert "Pause" in panel.btn_pause.text()
+
+
+def test_table_sorting_and_row_mapping(qapp, tmp_path: Path):
+    from PIL import Image
+    from PySide6.QtCore import Qt
+
+    from src.gui.components.drop_zone import COL_NAME, COL_NUM, BatchQueueTable
+
+    img_b = tmp_path / "b_file.png"
+    img_a = tmp_path / "a_file.png"
+    img_c = tmp_path / "c_file.png"
+    for p in (img_b, img_a, img_c):
+        Image.new("RGB", (20, 20)).save(p)
+
+    table = BatchQueueTable()
+    table.prompt_on_add = False
+    table.add_paths([img_b, img_a, img_c])
+
+    assert table.table.isSortingEnabled()
+
+    # Sort ascending by Name (COL_NAME = 1)
+    table.table.sortItems(COL_NAME, Qt.AscendingOrder)
+    assert table.table.item(0, COL_NAME).text() == "a_file.png"
+    assert table.table.item(1, COL_NAME).text() == "b_file.png"
+    assert table.table.item(2, COL_NAME).text() == "c_file.png"
+
+    # Verify get_files returns sorted order
+    files = table.get_files()
+    assert files[0].name == "a_file.png"
+    assert files[1].name == "b_file.png"
+    assert files[2].name == "c_file.png"
+
+    # Verify status update accurately matches even when sorted
+    table.set_file_status(str(img_b), "Done")
+    assert table._get_row_status(1) == "Done"
+    assert table._get_row_status(0) == "Queued"
+
+    # Sort by COL_NUM (index 0) to verify numeric sorting
+    table.table.sortItems(COL_NUM, Qt.AscendingOrder)
+    assert table.table.item(0, COL_NAME).text() == "b_file.png"
+
+
+def test_context_menu_open_destination_and_view_output(qapp, tmp_path: Path, mocker):
+    from PIL import Image
+    from PySide6.QtGui import QDesktopServices
+
+    from src.gui.components.drop_zone import BatchQueueTable
+
+    img = tmp_path / "photo.png"
+    out_img = tmp_path / "output" / "photo_x4.png"
+    out_img.parent.mkdir(parents=True)
+    Image.new("RGB", (30, 30)).save(img)
+    Image.new("RGB", (120, 120)).save(out_img)
+
+    table = BatchQueueTable()
+    table.prompt_on_add = False
+    table.set_default_destination(str(tmp_path / "output"))
+    table.add_paths([img])
+
+    table.set_file_status(str(img), "Done", output_path=str(out_img))
+
+    opened_urls = []
+    mocker.patch.object(
+        QDesktopServices,
+        "openUrl",
+        side_effect=lambda url: opened_urls.append(url.toLocalFile()) or True,
+    )
+
+    # 1. Open Destination Folder
+    table._open_selected_destination([0])
+    assert len(opened_urls) == 1
+    assert Path(opened_urls[0]).resolve() == (tmp_path / "output").resolve()
+
+    # 2. View Output Image
+    table._view_selected_output(0)
+    assert len(opened_urls) == 2
+    assert Path(opened_urls[1]).resolve() == out_img.resolve()
+
+
+def test_main_window_audio_alert_and_settings_persistence(qapp, tmp_path: Path, mocker):
+    from PySide6.QtWidgets import QApplication
+
+    from src.core.engine import EngineResult
+    from src.core.settings import load_app_settings
+    from src.gui.main_window import MainWindow
+
+    settings_file = tmp_path / "test_settings.json"
+    mocker.patch(
+        "src.core.settings.get_settings_file_path", return_value=settings_file
+    )
+
+    beep_called = []
+    mocker.patch.object(QApplication, "beep", side_effect=lambda: beep_called.append(True))
+
+    win = MainWindow()
+    # Test beep on finish
+    res = EngineResult(
+        total=1,
+        completed=1,
+        failed=0,
+        elapsed_seconds=0.5,
+        output_dir=tmp_path,
+        cancelled=False,
+    )
+    win._on_batch_finished(res)
+    assert len(beep_called) == 1
+
+    # Modify some settings
+    win.control_panel.slider_denoise.setValue(45)
+    win.queue_table.prompt_on_add = False
+
+    # Close window and verify saved settings
+    event = mocker.MagicMock()
+    win.closeEvent(event)
+
+    saved = load_app_settings(path=settings_file)
+    assert saved["prompt_on_add"] is False
+    assert saved["controls"]["denoise_strength"] == 45
+
+
+
 
 
 

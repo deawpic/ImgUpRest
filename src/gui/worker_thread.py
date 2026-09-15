@@ -23,6 +23,18 @@ class UpscaleWorkerThread(QThread):
         """Requests cooperative engine cancellation."""
         self.engine.cancel()
 
+    def pause(self):
+        """Requests cooperative engine pause."""
+        self.engine.pause()
+
+    def resume(self):
+        """Resumes paused engine."""
+        self.engine.resume()
+
+    @property
+    def is_paused(self) -> bool:
+        return self.engine.is_paused
+
     def run(self):
         """Executes the upscale engine in background thread."""
         try:

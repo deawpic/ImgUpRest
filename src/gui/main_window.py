@@ -21,6 +21,7 @@ from src.core.session import (
     auto_save_session,
     clear_auto_session,
 )
+from src.core.settings import load_app_settings, save_app_settings
 from src.gui.components.comparison_viewer import ComparisonViewer
 from src.gui.components.control_panel import ControlPanel
 from src.gui.components.drop_zone import BatchQueueTable
@@ -94,6 +95,7 @@ class MainWindow(QMainWindow):
 
         self._setup_ui()
         self._connect_signals()
+        self._load_app_settings()
         self._auto_restore_session()
 
     def _setup_ui(self):
@@ -178,7 +180,38 @@ class MainWindow(QMainWindow):
 
         # Execution actions
         self.progress_panel.start_clicked.connect(self._start_batch)
+        self.progress_panel.pause_clicked.connect(self._on_pause_clicked)
         self.progress_panel.cancel_clicked.connect(self._cancel_batch)
+
+    def _load_app_settings(self):
+        """Loads and applies persistent settings on startup."""
+        try:
+            data = load_app_settings()
+            if not data:
+                return
+
+            saved_theme = data.get("theme", "light")
+            if (saved_theme == "dark" and not self._is_dark) or (
+                saved_theme == "light" and self._is_dark
+            ):
+                self._toggle_theme()
+
+            if "prompt_on_add" in data:
+                self.queue_table.prompt_on_add = bool(data["prompt_on_add"])
+
+            if "controls" in data and isinstance(data["controls"], dict):
+                self.control_panel.apply_settings_dict(data["controls"])
+                if (
+                    "output_dir" in data["controls"]
+                    and data["controls"]["output_dir"]
+                ):
+                    self.queue_table.set_default_destination(
+                        data["controls"]["output_dir"]
+                    )
+        except Exception as exc:
+            self.log_viewer.append_log(
+                f"Note: Could not load user settings: {exc}", "WARNING"
+            )
 
     def _auto_restore_session(self):
         """Attempts to restore the previously active queue session automatically."""
@@ -299,6 +332,17 @@ class MainWindow(QMainWindow):
             self.log_viewer.append_log("Cancellation requested...", "WARNING")
             self._worker_thread.cancel()
 
+    def _on_pause_clicked(self):
+        if self._worker_thread and self._worker_thread.isRunning():
+            if self._worker_thread.is_paused:
+                self._worker_thread.resume()
+                self.progress_panel.set_paused_state(False)
+                self.log_viewer.append_log("▶️ Upscaling resumed.", "INFO")
+            else:
+                self._worker_thread.pause()
+                self.progress_panel.set_paused_state(True)
+                self.log_viewer.append_log("⏸️ Upscaling paused.", "INFO")
+
     def _on_file_selected(self, file_path: str):
         self.comparison_viewer.set_selected_file(file_path)
         self._check_existing_output_for_selected(file_path)
@@ -380,6 +424,10 @@ class MainWindow(QMainWindow):
             cancelled=result.cancelled,
         )
         if not result.cancelled:
+            try:
+                QApplication.beep()
+            except Exception:
+                pass
             self.log_viewer.append_log(
                 f"Batch completed! {result.completed}/{result.total} saved to {result.output_dir}",
                 "SUCCESS",
@@ -428,7 +476,17 @@ class MainWindow(QMainWindow):
         self.log_viewer.append_log(f"Preview generation failed: {error}", "ERROR")
 
     def closeEvent(self, event):
-        """Cleanly terminates all background workers and auto-saves the active session."""
+        """Cleanly terminates all background workers and auto-saves the active session and settings."""
+        try:
+            settings_payload = {
+                "controls": self.control_panel.export_settings_dict(),
+                "theme": "dark" if self._is_dark else "light",
+                "prompt_on_add": self.queue_table.prompt_on_add,
+            }
+            save_app_settings(settings_payload)
+        except Exception:
+            pass
+
         try:
             items = self.queue_table.export_session_items()
             if items:

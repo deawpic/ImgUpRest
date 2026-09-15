@@ -201,3 +201,37 @@ def test_find_weight_file_legacy_cache_fallback(monkeypatch, tmp_path):
     assert found is not None
     assert found == fake_yunet
 
+
+def test_download_weight_file_with_none_stdout_stderr(monkeypatch, tmp_path):
+    """Verifies download succeeds even when sys.stdout and sys.stderr are None (GUI/PyInstaller windowed mode)."""
+    import sys
+    import urllib.request
+
+    from src.core.face_enhancer import download_weight_file
+
+    dest_dir = tmp_path / "weights"
+
+    # Simulate GUI environment where stdout and stderr are None
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    # Mock urllib.request.urlretrieve to write dummy file and trigger reporthook
+    def mock_urlretrieve(url, filename, reporthook=None):
+        with open(filename, "wb") as f:
+            f.write(b"0" * 300_000)
+        if reporthook:
+            reporthook(1, 100_000, 300_000)
+            reporthook(3, 100_000, 300_000)
+
+    monkeypatch.setattr(urllib.request, "urlretrieve", mock_urlretrieve)
+
+    logged = []
+    out = download_weight_file(
+        "yunet",
+        dest_dir=dest_dir,
+        log_callback=lambda msg, lvl: logged.append((msg, lvl)),
+    )
+    assert out.exists()
+    assert out.stat().st_size >= 200_000
+    assert any("Successfully downloaded" in m for m, _ in logged)
+

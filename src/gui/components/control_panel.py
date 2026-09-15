@@ -467,3 +467,120 @@ class ControlPanel(QWidget):
             face_fidelity=face_fidelity,
             mask_mouth=mask_mouth,
         )
+
+    def export_settings_dict(self) -> dict:
+        """Exports current UI control panel settings as a dictionary for persistence."""
+        fmt_map = {0: "jpg", 1: "png", 2: "webp"}
+        fmt = fmt_map.get(self.cmb_format.currentIndex(), "jpg")
+        return {
+            "preset": self.cmb_preset.currentData() or "photo",
+            "model": self.cmb_model.currentData() or "realesr-general-x4v3",
+            "scale": self.scale_group.checkedId(),
+            "denoise_strength": self.slider_denoise.value(),
+            "grain_strength": self.slider_grain.value(),
+            "enable_face_enhance": self.chk_face_enhance.isChecked(),
+            "face_model": self.cmb_face_model.currentData() or "gfpgan",
+            "face_fidelity": round(self.slider_fidelity.value() / 100.0, 2),
+            "mask_mouth": self.chk_mask_mouth.isChecked(),
+            "tile_size": self.slider_tile.value(),
+            "quality": self.slider_quality.value(),
+            "output_format": fmt,
+            "enable_gpu": self.chk_gpu.isChecked(),
+            "cpu_workers": self.spin_cpu_workers.value(),
+            "output_dir": self.txt_output_dir.text(),
+        }
+
+    def apply_settings_dict(self, settings: dict) -> None:
+        """Applies loaded settings dictionary to the UI widgets."""
+        if not settings:
+            return
+
+        # Preset
+        preset_key = settings.get("preset")
+        if preset_key and preset_key != "custom":
+            idx = self.cmb_preset.findData(preset_key)
+            if idx >= 0:
+                self.cmb_preset.setCurrentIndex(idx)
+
+        # Model
+        if "model" in settings:
+            m_idx = self.cmb_model.findData(settings["model"])
+            if m_idx >= 0:
+                self.cmb_model.setCurrentIndex(m_idx)
+                info = MODELS.get(settings["model"])
+                if info:
+                    self.lbl_model_desc.setText(info.recommended_for)
+
+        # Scale
+        if "scale" in settings:
+            if settings["scale"] == 4:
+                self.rb_scale_4.setChecked(True)
+            elif settings["scale"] == 2:
+                self.rb_scale_2.setChecked(True)
+
+        # Denoise
+        if "denoise_strength" in settings:
+            val = int(settings["denoise_strength"])
+            self.slider_denoise.setValue(val)
+            self.lbl_denoise_val.setText("0% (Preserve Grain)" if val == 0 else f"{val}%")
+
+        # Grain
+        if "grain_strength" in settings:
+            val = int(settings["grain_strength"])
+            self.slider_grain.setValue(val)
+            self.lbl_grain_val.setText("0% (Off)" if val == 0 else f"{val}% (Organic 35mm)")
+
+        # Face Enhance
+        if "enable_face_enhance" in settings:
+            fe = bool(settings["enable_face_enhance"])
+            self.chk_face_enhance.setChecked(fe)
+            self.cmb_face_model.setEnabled(fe)
+            self.slider_fidelity.setEnabled(fe)
+            self.chk_mask_mouth.setEnabled(fe)
+
+        if "face_model" in settings:
+            f_idx = self.cmb_face_model.findData(settings["face_model"])
+            if f_idx >= 0:
+                self.cmb_face_model.setCurrentIndex(f_idx)
+
+        if "face_fidelity" in settings:
+            fid = float(settings["face_fidelity"])
+            self.slider_fidelity.setValue(int(fid * 100))
+            self.lbl_fidelity_val.setText(f"{fid:.2f}")
+
+        if "mask_mouth" in settings:
+            self.chk_mask_mouth.setChecked(bool(settings["mask_mouth"]))
+
+        # Tile size
+        if "tile_size" in settings:
+            ts = int(settings["tile_size"])
+            self.slider_tile.setValue(ts)
+            self.lbl_tile_val.setText("0 (Auto / Fast)" if ts == 0 else f"{ts} px")
+
+        # Format & Quality
+        if "output_format" in settings:
+            inv_fmt = {"jpg": 0, "png": 1, "webp": 2}
+            f_idx = inv_fmt.get(str(settings["output_format"]).lower(), 0)
+            self.cmb_format.setCurrentIndex(f_idx)
+            is_png = f_idx == 1
+            self.slider_quality.setEnabled(not is_png)
+            self.lbl_quality_val.setEnabled(not is_png)
+
+        if "quality" in settings:
+            q = int(settings["quality"])
+            self.slider_quality.setValue(q)
+            self.lbl_quality_val.setText(f"{q}%")
+
+        # GPU & CPU workers
+        if "enable_gpu" in settings:
+            self.chk_gpu.setChecked(bool(settings["enable_gpu"]))
+
+        if "cpu_workers" in settings:
+            self.spin_cpu_workers.setValue(int(settings["cpu_workers"]))
+
+        # Output dir
+        if "output_dir" in settings and settings["output_dir"]:
+            self.txt_output_dir.setText(str(settings["output_dir"]))
+
+        if preset_key == "custom":
+            self._mark_as_custom()

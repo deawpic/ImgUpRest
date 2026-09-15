@@ -13,6 +13,11 @@ from src.core.session import (
     load_session,
     save_session,
 )
+from src.core.settings import (
+    get_settings_file_path,
+    load_app_settings,
+    save_app_settings,
+)
 
 __all__ = [
     "MODELS",
@@ -34,7 +39,10 @@ __all__ = [
     "extract_image_metadata",
     "get_default_cpu_workers",
     "get_save_kwargs",
+    "get_settings_file_path",
+    "load_app_settings",
     "load_session",
+    "save_app_settings",
     "save_session",
 ]
 

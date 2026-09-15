@@ -150,6 +150,16 @@ def main():
         print(f"[Info] No supported images found in {input_path}")
         return
 
+    if not config.file_destinations and input_path.is_dir():
+        config.file_destinations = {
+            str(img): str(
+                (
+                    output_path / input_path.name / img.relative_to(input_path).parent
+                ).resolve()
+            )
+            for img in images
+        }
+
     engine = UpscaleEngine()
 
     with tqdm(total=len(images), desc="Upscaling") as pbar:

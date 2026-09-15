@@ -18,11 +18,14 @@ class ProgressPanel(QWidget):
     """Execution control panel with real-time speed, ETA, and progress bar."""
 
     start_clicked = Signal()
+    pause_clicked = Signal()
     cancel_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._output_dir: Path = Path.cwd() / "output"
+        self._last_completed: int = 0
+        self._last_total: int = 0
         self._setup_ui()
 
     def _setup_ui(self):
@@ -90,6 +93,29 @@ class ProgressPanel(QWidget):
             """
         )
 
+        self.btn_pause = QPushButton("⏸️ Pause")
+        self.btn_pause.setEnabled(False)
+        self.btn_pause.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #d97706;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 5px 16px;
+                border-radius: 5px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #b45309;
+            }
+            QPushButton:disabled {
+                background-color: #cbd5e1;
+                color: #94a3b8;
+            }
+            """
+        )
+
         self.btn_cancel = QPushButton("⏹️ Cancel")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.setStyleSheet(
@@ -133,6 +159,7 @@ class ProgressPanel(QWidget):
         )
 
         btn_layout.addWidget(self.btn_start)
+        btn_layout.addWidget(self.btn_pause)
         btn_layout.addWidget(self.btn_cancel)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_open_folder)
@@ -140,6 +167,7 @@ class ProgressPanel(QWidget):
 
         # Signals
         self.btn_start.clicked.connect(self.start_clicked.emit)
+        self.btn_pause.clicked.connect(self.pause_clicked.emit)
         self.btn_cancel.clicked.connect(self.cancel_clicked.emit)
         self.btn_open_folder.clicked.connect(self._open_output_folder)
 
@@ -147,6 +175,8 @@ class ProgressPanel(QWidget):
         self._output_dir = Path(path).resolve()
 
     def update_progress(self, completed: int, total: int, speed: float, eta: float):
+        self._last_completed = completed
+        self._last_total = total
         if total > 0:
             percent = int((completed / total) * 100)
             self.progress_bar.setValue(percent)
@@ -161,9 +191,24 @@ class ProgressPanel(QWidget):
     def set_running_state(self, is_running: bool):
         self.btn_start.setEnabled(not is_running)
         self.btn_cancel.setEnabled(is_running)
+        self.btn_pause.setEnabled(is_running)
+        self.btn_pause.setText("⏸️ Pause")
+
+    def set_paused_state(self, is_paused: bool):
+        if is_paused:
+            self.btn_pause.setText("▶️ Resume")
+            self.lbl_status.setText(f"⏸️ Paused ({self._last_completed}/{self._last_total})")
+            self.lbl_telemetry.setText("Processing suspended. Click Resume to continue.")
+        else:
+            self.btn_pause.setText("⏸️ Pause")
+            if self._last_total > 0:
+                pct = int((self._last_completed / self._last_total) * 100)
+                self.lbl_status.setText(f"Upscaling ({self._last_completed}/{self._last_total} - {pct}%)")
 
     def set_finished_state(self, completed: int, total: int, cancelled: bool):
         self.set_running_state(False)
+        self.btn_pause.setEnabled(False)
+        self.btn_pause.setText("⏸️ Pause")
         if cancelled:
             self.lbl_status.setText(f"⚠️ Cancelled ({completed}/{total} completed)")
             self.lbl_telemetry.setText("Batch cancelled by user.")

@@ -2,8 +2,8 @@
 import os
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
-datas = collect_data_files("realesrgan_ncnn_py")
-binaries = collect_dynamic_libs("realesrgan_ncnn_py")
+datas = collect_data_files("realesrgan_ncnn_py") + collect_data_files("onnxruntime")
+binaries = collect_dynamic_libs("realesrgan_ncnn_py") + collect_dynamic_libs("onnxruntime")
 
 project_root = os.path.abspath(os.path.join(SPECPATH, ".."))
 entry_point = os.path.join(project_root, "src", "gui", "app.py")

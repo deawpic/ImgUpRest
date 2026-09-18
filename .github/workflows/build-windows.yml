@@ -1,15 +1,18 @@
-name: Release Standalone Windows (Nuitka)
+name: Build Windows Executable (.exe)
 
 on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
   release:
     types: [published]
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
-  build-windows-nuitka:
-    name: Build Standalone Windows Executable (Nuitka)
+  build-windows:
+    name: Build Standalone Windows Executable (PyInstaller onedir)
     runs-on: windows-latest
     permissions:
       contents: write
@@ -29,9 +32,9 @@ jobs:
           uv python install 3.11
           uv run --python 3.11 python --version
 
-      - name: Install dependencies & Nuitka
+      - name: Install dependencies and PyInstaller
         run: |
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev]" pyinstaller
 
       - name: Run automated tests
         env:
@@ -39,35 +42,19 @@ jobs:
         run: |
           uv run pytest tests/ -v
 
-      - name: Build Standalone Executable with Nuitka
+      - name: Build executable with PyInstaller (onedir)
         run: |
-          uv run python -m nuitka `
-            --standalone `
-            --enable-plugin=pyside6 `
-            --include-package=src `
-            --include-package-data=realesrgan_ncnn_py `
-            --include-package=realesrgan_ncnn_py `
-            --include-package=PIL `
-            --include-package=cv2 `
-            --include-package-data=onnxruntime `
-            --include-package=onnxruntime `
-            --windows-console-mode=disable `
-            --output-dir=dist `
-            --output-filename=RealESRGAN_GUI.exe `
-            --assume-yes-for-downloads `
-            --msvc=latest `
-            --lto=no `
-            src/gui/app.py
+          uv run --python 3.11 pyinstaller --noconfirm packaging/pyinstaller_windows.spec
 
-      - name: Prepare distribution directory and zip
+      - name: Verify build output directory exists
         run: |
-          if (Test-Path "dist/app.dist") {
-            Rename-Item -Path "dist/app.dist" -NewName "RealESRGAN_GUI_Windows"
-          }
-          if (!(Test-Path "dist/RealESRGAN_GUI_Windows")) {
-            Write-Error "Expected build directory dist/RealESRGAN_GUI_Windows not found!"
+          if (!(Test-Path "dist/RealESRGAN_GUI_Windows/RealESRGAN_GUI.exe")) {
+            Write-Error "Expected build executable dist/RealESRGAN_GUI_Windows/RealESRGAN_GUI.exe not found!"
             exit 1
           }
+
+      - name: Compress build output into ZIP
+        run: |
           Compress-Archive -Path dist/RealESRGAN_GUI_Windows/* -DestinationPath RealESRGAN_GUI_Windows_x64.zip
 
       - name: Upload Windows Build Artifact

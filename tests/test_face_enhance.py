@@ -190,6 +190,8 @@ def test_find_weight_file_legacy_cache_fallback(monkeypatch, tmp_path):
 
     monkeypatch.delenv("REAL_ESRGAN_WEIGHTS_DIR", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / ".local" / "share"))
 
     # Place a dummy weight file in the legacy cache directory
     legacy_dir = tmp_path / ".cache" / "real_esrgan_gui" / "weights"

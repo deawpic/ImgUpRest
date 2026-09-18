@@ -482,8 +482,8 @@ chmod +x packaging/build_linux.sh
 โปรเจกต์มี CI Workflow ใน [`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml):
 - ทำการรันเทส ตรวจสอบความถูกต้อง และ Build ไฟล์ `.exe` แบบ Onedir ด้วย **PyInstaller** บน Windows Server (GitHub Runner)
 - บังคับใช้ **Python 3.11** ผ่าน `astral-sh/setup-uv`
-- บีบอัดไดเรกทอรี Onedir เป็น `RealESRGAN_GUI_Windows_x64.zip` และอัปโหลดเป็น GitHub Artifacts ให้ดาวน์โหลดได้ทันที
-- แนบไฟล์ Release ให้อัตโนมัติเมื่อมีการสร้าง Release หรือ Push Git Tag (เช่น `v2.2.1`)
+- ทำงานเฉพาะเมื่อมีการ Push Release Tag (เช่น `v2.2.1`), สร้าง Release บน GitHub, หรือกด Manual Workflow Dispatch (ไม่สั่ง Build ทุกครั้งที่ Push กิ่ง `main` เพื่อประหยัดเวลาและ Runner Resource)
+- บีบอัดไดเรกทอรี Onedir เป็น `RealESRGAN_GUI_Windows_x64.zip` และอัปโหลดเป็น GitHub Artifacts / Releases ให้ดาวน์โหลดได้ทันที
 
 ---
 
